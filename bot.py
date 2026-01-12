@@ -10,7 +10,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 # ================== CHANNEL IDS (CHANGE THESE) ==================
 WELCOME_CHANNEL_ID = "welcome"
-GOODBYE_CHANNEL_ID = "goodbye"
+GOODBYE_CHANNEL_ID = "welcome"
 ROLE_UPDATE_CHANNEL_ID = "promotions"
 LOG_CHANNEL_ID = "logs"
 
@@ -173,3 +173,4 @@ async def mute(interaction: discord.Interaction, member: discord.Member, minutes
 
 # ================== RUN ==================
 bot.run(TOKEN)
+
