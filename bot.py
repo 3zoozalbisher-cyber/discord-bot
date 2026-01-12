@@ -15,7 +15,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ---------------- CHANNEL IDS ----------------
 WELCOME_CHANNEL_ID = 1414762426758463598
 GOODBYE_CHANNEL_ID = 1460384380437659710
-ROLE_MESSAGE_CHANNEL_ID = 1460009709875761354
 LOG_CHANNEL_ID = 1460366893994086554
 
 # ---------------- ROLE EVENT CACHE (ANTI-DUPLICATE) ----------------
@@ -143,3 +142,4 @@ async def on_voice_state_update(member, before, after):
 
 # ---------------- RUN ----------------
 bot.run(os.getenv("DISCORD_TOKEN"))
+
