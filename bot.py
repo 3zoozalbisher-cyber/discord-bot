@@ -26,7 +26,7 @@ bot = MyBot()
 async def on_ready():
     print(f"🟢 Logged in as {bot.user}")
 
-# -------- MEMBER JOIN --------
+# -------- WELCOME --------
 @bot.event
 async def on_member_join(member):
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
@@ -39,7 +39,7 @@ async def on_member_join(member):
         file=file
     )
 
-# -------- MEMBER LEAVE --------
+# -------- GOODBYE --------
 @bot.event
 async def on_member_remove(member):
     channel = bot.get_channel(GOODBYE_CHANNEL_ID)
@@ -52,31 +52,35 @@ async def on_member_remove(member):
         file=file
     )
 
-# -------- ROLE ADD / REMOVE --------
+# -------- ROLE ADD / REMOVE (FORMATTED) --------
 @bot.event
 async def on_member_update(before, after):
     before_roles = set(before.roles)
     after_roles = set(after.roles)
 
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if not channel:
+        return
+
     for role in after_roles - before_roles:
         if role.is_default():
             continue
-        channel = bot.get_channel(LOG_CHANNEL_ID)
-        if channel:
-            await channel.send(
-                f"🎉 {after.mention} was given role **{role.name}**"
-            )
+        await channel.send(
+            f"✅ added role\n"
+            f"👤 {after.mention}\n"
+            f"🎭 {role.name}"
+        )
 
     for role in before_roles - after_roles:
         if role.is_default():
             continue
-        channel = bot.get_channel(LOG_CHANNEL_ID)
-        if channel:
-            await channel.send(
-                f"❌ {after.mention} lost role **{role.name}**"
-            )
+        await channel.send(
+            f"❌ removed role\n"
+            f"👤 {after.mention}\n"
+            f"🎭 {role.name}"
+        )
 
-# -------- VOICE JOIN / LEAVE --------
+# -------- VOICE JOIN / LEAVE (FORMATTED) --------
 @bot.event
 async def on_voice_state_update(member, before, after):
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -85,12 +89,14 @@ async def on_voice_state_update(member, before, after):
 
     if before.channel is None and after.channel is not None:
         await channel.send(
-            f"🔊 {member.mention} joined voice channel **{after.channel.name}**"
+            f"🔊 joined voice channel\n"
+            f"👤 {member.mention}"
         )
 
     elif before.channel is not None and after.channel is None:
         await channel.send(
-            f"🔇 {member.mention} left voice channel **{before.channel.name}**"
+            f"🔇 left voice channel\n"
+            f"👤 {member.mention}"
         )
 
 # -------- RUN --------
