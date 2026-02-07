@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import time
-import math
+import sqlite3
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -15,6 +15,21 @@ LOG_CHANNEL_ID = 1460366893994086554
 APPLICATION_ID = 1460013127063175229
 # =========================================
 
+# ================= DATABASE =================
+db = sqlite3.connect("bot.db")
+cursor = db.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    xp INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 1,
+    voice_time INTEGER DEFAULT 0
+)
+""")
+db.commit()
+# ==========================================
+
 # ================= INTENTS =================
 intents = discord.Intents.default()
 intents.members = True
@@ -23,185 +38,181 @@ intents.voice_states = True
 # ==========================================
 
 # ================= BOT =====================
-class MyBot(commands.Bot):
-    def __init__(self):
-        super().__init__(
-            command_prefix="!",
-            intents=intents,
-            application_id=APPLICATION_ID
-        )
-
-    async def setup_hook(self):
-        await self.tree.sync()
-        print("✅ Slash commands synced")
-
-bot = MyBot()
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents,
+    application_id=APPLICATION_ID
+)
 # ==========================================
 
-# ================= STORAGE =================
+# ============ VOICE TRACKING ===============
 voice_sessions = {}
-total_voice_time = {}   # user_id -> seconds
+# ==========================================
 
-xp_data = {}            # user_id -> xp
-level_data = {}         # user_id -> level
-xp_cooldown = {}        # user_id -> timestamp
+# ================= HELPERS =================
+def get_user(user_id):
+    cursor.execute(
+        "SELECT xp, level, voice_time FROM users WHERE user_id = ?",
+        (user_id,)
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        cursor.execute(
+            "INSERT INTO users (user_id) VALUES (?)",
+            (user_id,)
+        )
+        db.commit()
+        return 0, 1, 0
+
+    return row
 # ==========================================
 
 # ================= EVENTS ==================
 @bot.event
 async def on_ready():
-    print(f"🟢 Logged in as {bot.user}")
+    await bot.tree.sync()
+    print(f"✅ Logged in as {bot.user}")
 
-# --------- MEMBER JOIN ---------
+# --------- MEMBER JOIN (WITH IMAGE) --------
 @bot.event
 async def on_member_join(member):
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
     if channel:
-        try:
-            file = discord.File("images/welcome.png")
-            await channel.send(f"🎉 Welcome {member.mention}!", file=file)
-        except:
-            pass
+        await channel.send(
+            f"🎉 Welcome {member.mention}!",
+            file=discord.File("images/welcome.png")
+        )
 
-# -------- MEMBER LEAVE --------
+# -------- MEMBER LEAVE (WITH IMAGE) --------
 @bot.event
 async def on_member_remove(member):
     channel = bot.get_channel(GOODBYE_CHANNEL_ID)
     if channel:
-        try:
-            file = discord.File("images/goodbye.png")
-            await channel.send(f"👋 {member.name} left the server", file=file)
-        except:
-            pass
+        await channel.send(
+            f"👋 {member.name} left the server",
+            file=discord.File("images/goodbye.png")
+        )
 
-# -------- ROLE LOG --------
+# -------- ROLE ADD / REMOVE ----------------
 @bot.event
 async def on_member_update(before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     if not log:
         return
 
-    before_roles = set(before.roles)
-    after_roles = set(after.roles)
-
-    for role in after_roles - before_roles:
+    for role in set(after.roles) - set(before.roles):
         if not role.is_default():
             await log.send(
                 f"✅ added role\n👤 {after.mention}\n🎭 {role.name}"
             )
 
-    for role in before_roles - after_roles:
+    for role in set(before.roles) - set(after.roles):
         if not role.is_default():
             await log.send(
                 f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}"
             )
 
-# -------- VOICE TRACKING --------
+# -------- VOICE JOIN / LEAVE + SAVE --------
 @bot.event
 async def on_voice_state_update(member, before, after):
-    log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
+    # JOIN
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = now
-        if log:
-            await log.send(
-                f"🔊 joined voice channel\n👤 {member.mention}\n🎧 {after.channel.name}"
-            )
 
+    # LEAVE
     elif before.channel is not None and after.channel is None:
         start = voice_sessions.pop(member.id, None)
         if start:
             duration = int(now - start)
-            total_voice_time[member.id] = total_voice_time.get(member.id, 0) + duration
 
-            h = duration // 3600
-            m = (duration % 3600) // 60
-            s = duration % 60
+            cursor.execute(
+                "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+                (duration, member.id)
+            )
+            db.commit()
 
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            seconds = duration % 60
+
+            log = bot.get_channel(LOG_CHANNEL_ID)
             if log:
                 await log.send(
                     f"🔇 left voice channel\n"
                     f"👤 {member.mention}\n"
                     f"🎧 {before.channel.name}\n"
-                    f"⏱️ {h}h {m}m {s}s"
+                    f"⏱️ {hours}h {minutes}m {seconds}s"
                 )
 
-# -------- XP SYSTEM --------
+# -------- XP + LEVEL SYSTEM ----------------
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    user_id = message.author.id
-    now = time.time()
+    xp, level, voice_time = get_user(message.author.id)
 
-    if now - xp_cooldown.get(user_id, 0) < 30:
-        return
+    xp += 10
+    needed = level * 100
 
-    xp_cooldown[user_id] = now
-    xp_data[user_id] = xp_data.get(user_id, 0) + 10
-
-    level = level_data.get(user_id, 1)
-    xp_needed = level * 100
-
-    if xp_data[user_id] >= xp_needed:
-        level_data[user_id] = level + 1
-        xp_data[user_id] = 0
+    if xp >= needed:
+        xp = 0
+        level += 1
 
         log = bot.get_channel(LOG_CHANNEL_ID)
         if log:
             await log.send(
-                f"⭐ LEVEL UP!\n"
-                f"👤 {message.author.mention}\n"
-                f"🏆 Level {level + 1}"
+                f"⭐ LEVEL UP!\n👤 {message.author.mention}\n🏆 Level {level}"
             )
+
+    cursor.execute(
+        "UPDATE users SET xp = ?, level = ? WHERE user_id = ?",
+        (xp, level, message.author.id)
+    )
+    db.commit()
 
     await bot.process_commands(message)
 
 # ================= SLASH COMMANDS =================
+@bot.tree.command(name="profile", description="View your profile")
+async def profile(interaction: discord.Interaction):
+    xp, level, voice = get_user(interaction.user.id)
 
-@bot.tree.command(name="ping", description="Check bot latency")
-async def ping(interaction: discord.Interaction):
+    h = voice // 3600
+    m = (voice % 3600) // 60
+    s = voice % 60
+
     await interaction.response.send_message(
-        f"🏓 Pong! `{round(bot.latency * 1000)}ms`"
+        f"👤 {interaction.user.mention}\n"
+        f"⭐ Level: {level}\n"
+        f"📊 XP: {xp}/{level*100}\n"
+        f"🎙️ Voice: {h}h {m}m {s}s"
     )
 
-@bot.tree.command(name="hello", description="Say hello")
-async def hello(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        f"👋 Hello {interaction.user.mention}!"
-    )
-
-@bot.tree.command(name="level", description="Check your level")
-async def level(interaction: discord.Interaction):
-    uid = interaction.user.id
-    lvl = level_data.get(uid, 1)
-    xp = xp_data.get(uid, 0)
-    await interaction.response.send_message(
-        f"⭐ Level: {lvl}\n📊 XP: {xp}/{lvl*100}"
-    )
-
-@bot.tree.command(name="voicetop", description="Top voice time users")
+@bot.tree.command(name="voicetop", description="Top voice users")
 async def voicetop(interaction: discord.Interaction):
-    if not total_voice_time:
-        await interaction.response.send_message("No voice data yet.")
-        return
-
-    leaderboard = sorted(
-        total_voice_time.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )[:10]
+    cursor.execute(
+        "SELECT user_id, voice_time FROM users ORDER BY voice_time DESC LIMIT 10"
+    )
+    rows = cursor.fetchall()
 
     text = "🏆 **Voice Time Leaderboard**\n"
-    for i, (uid, seconds) in enumerate(leaderboard, 1):
+    for i, (uid, seconds) in enumerate(rows, 1):
         member = interaction.guild.get_member(uid)
         h = seconds // 3600
         m = (seconds % 3600) // 60
         text += f"{i}. {member.name if member else 'User'} — {h}h {m}m\n"
 
     await interaction.response.send_message(text)
+
+@bot.tree.command(name="ping", description="Check latency")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        f"🏓 Pong! `{round(bot.latency * 1000)}ms`"
+    )
 
 # ================= RUN =====================
 bot.run(TOKEN)
