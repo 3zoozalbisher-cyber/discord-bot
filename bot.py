@@ -44,8 +44,9 @@ bot = commands.Bot(
 )
 # ==========================================
 
-# ============ VOICE TRACKING ===============
-voice_sessions = {}  # user_id -> (channel_id, start_time)
+# ============ VOICE STATE ==================
+voice_state = {}  
+# user_id -> {"in_voice": bool, "channel_id": int, "start": float}
 # ==========================================
 
 # ================= HELPERS =================
@@ -66,9 +67,9 @@ async def on_ready():
 # --------- MEMBER JOIN ---------
 @bot.event
 async def on_member_join(member):
-    channel = bot.get_channel(WELCOME_CHANNEL_ID)
-    if channel:
-        await channel.send(
+    ch = bot.get_channel(WELCOME_CHANNEL_ID)
+    if ch:
+        await ch.send(
             f"🎉 Welcome {member.mention}!",
             file=discord.File("images/welcome.png")
         )
@@ -76,9 +77,9 @@ async def on_member_join(member):
 # -------- MEMBER LEAVE --------
 @bot.event
 async def on_member_remove(member):
-    channel = bot.get_channel(GOODBYE_CHANNEL_ID)
-    if channel:
-        await channel.send(
+    ch = bot.get_channel(GOODBYE_CHANNEL_ID)
+    if ch:
+        await ch.send(
             f"👋 {member.name} left the server",
             file=discord.File("images/goodbye.png")
         )
@@ -90,37 +91,33 @@ async def on_member_update(before, after):
     if not log:
         return
 
-    added = set(after.roles) - set(before.roles)
-    removed = set(before.roles) - set(after.roles)
-
-    for role in added:
+    for role in set(after.roles) - set(before.roles):
         if not role.is_default():
-            await log.send(
-                f"✅ added role\n"
-                f"👤 {after.mention}\n"
-                f"🎭 {role.name}"
-            )
+            await log.send(f"✅ added role\n👤 {after.mention}\n🎭 {role.name}")
 
-    for role in removed:
+    for role in set(before.roles) - set(after.roles):
         if not role.is_default():
-            await log.send(
-                f"❌ removed role\n"
-                f"👤 {after.mention}\n"
-                f"🎭 {role.name}"
-            )
+            await log.send(f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}")
 
-# -------- VOICE JOIN / LEAVE (FINAL FIX) --------
+# -------- VOICE (DEDUPLICATED PROPERLY) --------
 @bot.event
 async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
-    # ===== REAL JOIN =====
+    state = voice_state.get(member.id)
+
+    # ===== JOIN =====
     if before.channel is None and after.channel is not None:
-        if member.id in voice_sessions:
+        # already marked as in voice → ignore duplicate
+        if state and state["in_voice"]:
             return
 
-        voice_sessions[member.id] = (after.channel.id, now)
+        voice_state[member.id] = {
+            "in_voice": True,
+            "channel_id": after.channel.id,
+            "start": now
+        }
         ensure_user(member.id)
 
         if log:
@@ -131,14 +128,13 @@ async def on_voice_state_update(member, before, after):
             )
         return
 
-    # ===== REAL LEAVE =====
+    # ===== LEAVE =====
     if before.channel is not None and after.channel is None:
-        session = voice_sessions.pop(member.id, None)
-        if not session:
+        if not state or not state["in_voice"]:
             return
 
-        _, start = session
-        duration = int(now - start)
+        duration = int(now - state["start"])
+        voice_state[member.id]["in_voice"] = False
 
         cursor.execute(
             "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
@@ -159,17 +155,11 @@ async def on_voice_state_update(member, before, after):
             )
         return
 
-    # ===== IGNORE ALL OTHER VOICE UPDATES =====
+    # ===== IGNORE EVERYTHING ELSE =====
     return
 
 # ================= SLASH COMMANDS =================
-@bot.tree.command(name="ping", description="Check latency")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        f"🏓 Pong! `{round(bot.latency * 1000)}ms`"
-    )
-
-@bot.tree.command(name="profile", description="View your profile")
+@bot.tree.command(name="profile")
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
 
@@ -186,7 +176,6 @@ async def profile(interaction: discord.Interaction):
     await interaction.response.send_message(
         f"👤 {interaction.user.mention}\n"
         f"⭐ Level: {level}\n"
-        f"📊 XP: {xp}/{level*100}\n"
         f"🎙️ Voice: {h}h {m}m {s}s"
     )
 
