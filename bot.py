@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import time
 import sqlite3
+import uuid
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -14,8 +15,12 @@ LOG_CHANNEL_ID = 1460366893994086554
 APPLICATION_ID = 1460013127063175229
 # =========================================
 
+# ================= INSTANCE ID =================
+INSTANCE_ID = str(uuid.uuid4())[:8]
+# ===============================================
+
 # ================= DATABASE =================
-db = sqlite3.connect("bot.db")
+db = sqlite3.connect("bot.db", check_same_thread=False)
 cursor = db.cursor()
 
 cursor.execute("""
@@ -44,9 +49,9 @@ bot = commands.Bot(
 )
 # ==========================================
 
-# ============ VOICE TRACKING ===============
-voice_sessions = {}          # user_id -> start_time
-voice_event_cooldown = {}    # user_id -> last_event_time
+# ================= STATE ===================
+voice_sessions = {}
+voice_event_lock = {}
 # ==========================================
 
 # ================= HELPERS =================
@@ -62,9 +67,9 @@ def ensure_user(user_id):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ Logged in as {bot.user}")
+    print(f"🟢 BOT ONLINE | Instance: {INSTANCE_ID} | User: {bot.user}")
 
-# --------- MEMBER JOIN (WITH IMAGE) --------
+# -------- MEMBER JOIN --------
 @bot.event
 async def on_member_join(member):
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
@@ -74,7 +79,7 @@ async def on_member_join(member):
             file=discord.File("images/welcome.png")
         )
 
-# -------- MEMBER LEAVE (WITH IMAGE) --------
+# -------- MEMBER LEAVE --------
 @bot.event
 async def on_member_remove(member):
     channel = bot.get_channel(GOODBYE_CHANNEL_ID)
@@ -84,7 +89,7 @@ async def on_member_remove(member):
             file=discord.File("images/goodbye.png")
         )
 
-# -------- ROLE ADD / REMOVE ----------------
+# -------- ROLE LOG --------
 @bot.event
 async def on_member_update(before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
@@ -93,34 +98,25 @@ async def on_member_update(before, after):
 
     for role in set(after.roles) - set(before.roles):
         if not role.is_default():
-            await log.send(
-                f"✅ added role\n"
-                f"👤 {after.mention}\n"
-                f"🎭 {role.name}"
-            )
+            await log.send(f"✅ added role\n👤 {after.mention}\n🎭 {role.name}")
 
     for role in set(before.roles) - set(after.roles):
         if not role.is_default():
-            await log.send(
-                f"❌ removed role\n"
-                f"👤 {after.mention}\n"
-                f"🎭 {role.name}"
-            )
+            await log.send(f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}")
 
-# -------- VOICE JOIN / LEAVE (NO DUPES) ----
+# -------- VOICE JOIN / LEAVE (MAX SAFETY) --------
 @bot.event
 async def on_voice_state_update(member, before, after):
     now = time.time()
     log = bot.get_channel(LOG_CHANNEL_ID)
 
-    # ---- DUPLICATE PROTECTION ----
-    last = voice_event_cooldown.get(member.id, 0)
-    if now - last < 2:
+    # HARD LOCK (per user)
+    last = voice_event_lock.get(member.id, 0)
+    if now - last < 3:
         return
-    voice_event_cooldown[member.id] = now
-    # -----------------------------
+    voice_event_lock[member.id] = now
 
-    # ===== JOIN =====
+    # JOIN
     if before.channel is None and after.channel is not None:
         if member.id in voice_sessions:
             return
@@ -132,10 +128,11 @@ async def on_voice_state_update(member, before, after):
             await log.send(
                 f"🔊 joined voice channel\n"
                 f"👤 {member.mention}\n"
-                f"🎧 {after.channel.name}"
+                f"🎧 {after.channel.name}\n"
+                f"🆔 instance {INSTANCE_ID}"
             )
 
-    # ===== LEAVE =====
+    # LEAVE
     elif before.channel is not None and after.channel is None:
         start = voice_sessions.pop(member.id, None)
         if not start:
@@ -158,47 +155,11 @@ async def on_voice_state_update(member, before, after):
                 f"🔇 left voice channel\n"
                 f"👤 {member.mention}\n"
                 f"🎧 {before.channel.name}\n"
-                f"⏱️ {h}h {m}m {s}s"
+                f"⏱️ {h}h {m}m {s}s\n"
+                f"🆔 instance {INSTANCE_ID}"
             )
 
-# -------- XP + LEVEL SYSTEM ----------------
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    ensure_user(message.author.id)
-
-    cursor.execute(
-        "SELECT xp, level FROM users WHERE user_id = ?",
-        (message.author.id,)
-    )
-    xp, level = cursor.fetchone()
-
-    xp += 10
-    needed = level * 100
-
-    if xp >= needed:
-        xp = 0
-        level += 1
-
-        log = bot.get_channel(LOG_CHANNEL_ID)
-        if log:
-            await log.send(
-                f"⭐ LEVEL UP!\n"
-                f"👤 {message.author.mention}\n"
-                f"🏆 Level {level}"
-            )
-
-    cursor.execute(
-        "UPDATE users SET xp = ?, level = ? WHERE user_id = ?",
-        (xp, level, message.author.id)
-    )
-    db.commit()
-
-    await bot.process_commands(message)
-
-# ================= SLASH COMMANDS =================
+# ================= COMMANDS =================
 @bot.tree.command(name="profile", description="View your profile")
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
@@ -219,22 +180,6 @@ async def profile(interaction: discord.Interaction):
         f"📊 XP: {xp}/{level*100}\n"
         f"🎙️ Voice: {h}h {m}m {s}s"
     )
-
-@bot.tree.command(name="voicetop", description="Top voice users")
-async def voicetop(interaction: discord.Interaction):
-    cursor.execute(
-        "SELECT user_id, voice_time FROM users ORDER BY voice_time DESC LIMIT 10"
-    )
-    rows = cursor.fetchall()
-
-    text = "🏆 **Voice Time Leaderboard**\n"
-    for i, (uid, seconds) in enumerate(rows, 1):
-        member = interaction.guild.get_member(uid)
-        h = seconds // 3600
-        m = (seconds % 3600) // 60
-        text += f"{i}. {member.name if member else 'User'} — {h}h {m}m\n"
-
-    await interaction.response.send_message(text)
 
 @bot.tree.command(name="ping", description="Check latency")
 async def ping(interaction: discord.Interaction):
