@@ -50,22 +50,12 @@ voice_sessions = {}
 # ==========================================
 
 # ================= HELPERS =================
-def get_user(user_id):
+def ensure_user(user_id):
     cursor.execute(
-        "SELECT xp, level, voice_time FROM users WHERE user_id = ?",
+        "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
         (user_id,)
     )
-    row = cursor.fetchone()
-
-    if row is None:
-        cursor.execute(
-            "INSERT INTO users (user_id) VALUES (?)",
-            (user_id,)
-        )
-        db.commit()
-        return 0, 1, 0
-
-    return row
+    db.commit()
 # ==========================================
 
 # ================= EVENTS ==================
@@ -104,23 +94,36 @@ async def on_member_update(before, after):
     for role in set(after.roles) - set(before.roles):
         if not role.is_default():
             await log.send(
-                f"✅ added role\n👤 {after.mention}\n🎭 {role.name}"
+                f"✅ added role\n"
+                f"👤 {after.mention}\n"
+                f"🎭 {role.name}"
             )
 
     for role in set(before.roles) - set(after.roles):
         if not role.is_default():
             await log.send(
-                f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}"
+                f"❌ removed role\n"
+                f"👤 {after.mention}\n"
+                f"🎭 {role.name}"
             )
 
-# -------- VOICE JOIN / LEAVE + SAVE --------
+# -------- VOICE JOIN / LEAVE + DB SAVE -----
 @bot.event
 async def on_voice_state_update(member, before, after):
     now = time.time()
+    log = bot.get_channel(LOG_CHANNEL_ID)
 
     # JOIN
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = now
+        ensure_user(member.id)
+
+        if log:
+            await log.send(
+                f"🔊 joined voice channel\n"
+                f"👤 {member.mention}\n"
+                f"🎧 {after.channel.name}"
+            )
 
     # LEAVE
     elif before.channel is not None and after.channel is None:
@@ -138,7 +141,6 @@ async def on_voice_state_update(member, before, after):
             minutes = (duration % 3600) // 60
             seconds = duration % 60
 
-            log = bot.get_channel(LOG_CHANNEL_ID)
             if log:
                 await log.send(
                     f"🔇 left voice channel\n"
@@ -153,7 +155,13 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    xp, level, voice_time = get_user(message.author.id)
+    ensure_user(message.author.id)
+
+    cursor.execute(
+        "SELECT xp, level FROM users WHERE user_id = ?",
+        (message.author.id,)
+    )
+    xp, level = cursor.fetchone()
 
     xp += 10
     needed = level * 100
@@ -165,7 +173,9 @@ async def on_message(message):
         log = bot.get_channel(LOG_CHANNEL_ID)
         if log:
             await log.send(
-                f"⭐ LEVEL UP!\n👤 {message.author.mention}\n🏆 Level {level}"
+                f"⭐ LEVEL UP!\n"
+                f"👤 {message.author.mention}\n"
+                f"🏆 Level {level}"
             )
 
     cursor.execute(
@@ -179,7 +189,13 @@ async def on_message(message):
 # ================= SLASH COMMANDS =================
 @bot.tree.command(name="profile", description="View your profile")
 async def profile(interaction: discord.Interaction):
-    xp, level, voice = get_user(interaction.user.id)
+    ensure_user(interaction.user.id)
+
+    cursor.execute(
+        "SELECT xp, level, voice_time FROM users WHERE user_id = ?",
+        (interaction.user.id,)
+    )
+    xp, level, voice = cursor.fetchone()
 
     h = voice // 3600
     m = (voice % 3600) // 60
