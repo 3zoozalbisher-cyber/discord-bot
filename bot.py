@@ -31,7 +31,7 @@ db.commit()
 
 # ================= INTENTS =================
 intents = discord.Intents.default()
-intents.members = True          # 🔴 REQUIRED
+intents.members = True
 intents.message_content = True
 intents.voice_states = True
 # ==========================================
@@ -44,8 +44,8 @@ bot = commands.Bot(
 )
 # ==========================================
 
-# ================= STATE ===================
-voice_sessions = {}  # user_id -> start_time
+# ============ VOICE TRACKING ===============
+voice_sessions = {}  # user_id -> (channel_id, start_time)
 # ==========================================
 
 # ================= HELPERS =================
@@ -96,27 +96,31 @@ async def on_member_update(before, after):
     for role in added:
         if not role.is_default():
             await log.send(
-                f"✅ added role\n👤 {after.mention}\n🎭 {role.name}"
+                f"✅ added role\n"
+                f"👤 {after.mention}\n"
+                f"🎭 {role.name}"
             )
 
     for role in removed:
         if not role.is_default():
             await log.send(
-                f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}"
+                f"❌ removed role\n"
+                f"👤 {after.mention}\n"
+                f"🎭 {role.name}"
             )
 
-# -------- VOICE JOIN / LEAVE --------
+# -------- VOICE JOIN / LEAVE (FINAL FIX) --------
 @bot.event
 async def on_voice_state_update(member, before, after):
-    now = time.time()
     log = bot.get_channel(LOG_CHANNEL_ID)
+    now = time.time()
 
-    # JOIN
+    # ===== REAL JOIN =====
     if before.channel is None and after.channel is not None:
         if member.id in voice_sessions:
             return
 
-        voice_sessions[member.id] = now
+        voice_sessions[member.id] = (after.channel.id, now)
         ensure_user(member.id)
 
         if log:
@@ -125,13 +129,15 @@ async def on_voice_state_update(member, before, after):
                 f"👤 {member.mention}\n"
                 f"🎧 {after.channel.name}"
             )
+        return
 
-    # LEAVE
-    elif before.channel is not None and after.channel is None:
-        start = voice_sessions.pop(member.id, None)
-        if not start:
+    # ===== REAL LEAVE =====
+    if before.channel is not None and after.channel is None:
+        session = voice_sessions.pop(member.id, None)
+        if not session:
             return
 
+        _, start = session
         duration = int(now - start)
 
         cursor.execute(
@@ -151,6 +157,10 @@ async def on_voice_state_update(member, before, after):
                 f"🎧 {before.channel.name}\n"
                 f"⏱️ {h}h {m}m {s}s"
             )
+        return
+
+    # ===== IGNORE ALL OTHER VOICE UPDATES =====
+    return
 
 # ================= SLASH COMMANDS =================
 @bot.tree.command(name="ping", description="Check latency")
