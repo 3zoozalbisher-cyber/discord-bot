@@ -83,8 +83,10 @@ def add_xp(user_id, amount):
 # ================= EVENTS ==================
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
-    print(f"✅ Logged in as {bot.user}")
+    guild = discord.Object(id=998563480581963906)
+    await bot.tree.sync(guild=guild)
+    print(f"✅ Synced commands to guild {guild.id}")
+    print(f"Logged in as {bot.user}")
 
 # -------- MESSAGE XP --------
 @bot.event
@@ -246,5 +248,6 @@ async def voicetop(interaction: discord.Interaction):
 
 # ================= RUN =====================
 bot.run(TOKEN)
+
 
 
