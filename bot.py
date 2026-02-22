@@ -45,7 +45,7 @@ bot = commands.Bot(
 # ==========================================
 
 # ================= STATE ===================
-voice_state = {}
+voice_sessions = {}
 message_cooldown = {}
 # ==========================================
 
@@ -69,9 +69,10 @@ def add_xp(user_id, amount):
     xp += amount
     needed = level * 100
 
-    if xp >= needed:
+    while xp >= needed:
         xp -= needed
         level += 1
+        needed = level * 100
 
     cursor.execute(
         "UPDATE users SET xp = ?, level = ? WHERE user_id = ?",
@@ -85,6 +86,7 @@ def add_xp(user_id, amount):
 async def on_ready():
     await bot.tree.sync()
     print(f"✅ Logged in as {bot.user}")
+
 # -------- MESSAGE XP --------
 @bot.event
 async def on_message(message):
@@ -94,7 +96,7 @@ async def on_message(message):
     now = time.time()
     last = message_cooldown.get(message.author.id, 0)
 
-    if now - last >= 30:  # 30 sec cooldown
+    if now - last >= 30:
         add_xp(message.author.id, 5)
         message_cooldown[message.author.id] = now
 
@@ -108,10 +110,10 @@ async def on_voice_state_update(member, before, after):
 
     # JOIN
     if before.channel is None and after.channel is not None:
-        if member.id in voice_state:
+        if member.id in voice_sessions:
             return
 
-        voice_state[member.id] = now
+        voice_sessions[member.id] = now
         ensure_user(member.id)
 
         if log:
@@ -124,7 +126,7 @@ async def on_voice_state_update(member, before, after):
 
     # LEAVE
     if before.channel is not None and after.channel is None:
-        start = voice_state.pop(member.id, None)
+        start = voice_sessions.pop(member.id, None)
         if not start:
             return
 
@@ -132,8 +134,7 @@ async def on_voice_state_update(member, before, after):
         minutes = duration // 60
 
         if minutes > 0:
-            xp_gain = minutes * 10
-            add_xp(member.id, xp_gain)
+            add_xp(member.id, minutes * 10)
 
         cursor.execute(
             "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
@@ -183,14 +184,16 @@ async def on_member_update(before, after):
 
     for role in set(after.roles) - set(before.roles):
         if not role.is_default():
-            await log.send(f"✅ added role\n👤 {after.mention}\n🎭 {role.name}")
+            await log.send(
+                f"✅ added role\n👤 {after.mention}\n🎭 {role.name}"
+            )
 
     for role in set(before.roles) - set(after.roles):
         if not role.is_default():
-            await log.send(f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}")
+            await log.send(
+                f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}"
+            )
 
-# ================= SLASH COMMANDS =================
-# ================= SLASH COMMANDS =================
 # ================= SLASH COMMANDS =================
 
 @bot.tree.command(name="profile", description="View your profile")
@@ -243,9 +246,6 @@ async def voicetop(interaction: discord.Interaction):
         text += f"**{i}.** {name} — {hours}h {minutes}m\n"
 
     await interaction.response.send_message(text)
+
 # ================= RUN =====================
 bot.run(TOKEN)
-
-
-
-
