@@ -195,6 +195,30 @@ async def on_member_update(before, after):
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
 
+    @bot.tree.command(name="voicetop", description="Top voice time leaderboard")
+async def voicetop(interaction: discord.Interaction):
+    cursor.execute(
+        "SELECT user_id, voice_time FROM users ORDER BY voice_time DESC LIMIT 10"
+    )
+    rows = cursor.fetchall()
+
+    if not rows:
+        await interaction.response.send_message("No voice data yet.")
+        return
+
+    text = "🏆 **Voice Time Leaderboard**\n\n"
+
+    for i, (user_id, seconds) in enumerate(rows, start=1):
+        member = interaction.guild.get_member(user_id)
+
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+
+        name = member.name if member else f"User {user_id}"
+        text += f"**{i}.** {name} — {hours}h {minutes}m\n"
+
+    await interaction.response.send_message(text)
+    
     cursor.execute(
         "SELECT xp, level, voice_time FROM users WHERE user_id = ?",
         (interaction.user.id,)
@@ -219,3 +243,4 @@ async def profile(interaction: discord.Interaction):
 
 # ================= RUN =====================
 bot.run(TOKEN)
+
