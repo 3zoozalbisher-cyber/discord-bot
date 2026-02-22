@@ -83,11 +83,8 @@ def add_xp(user_id, amount):
 # ================= EVENTS ==================
 @bot.event
 async def on_ready():
-    guild = discord.Object(id=998563480581963906)
-    await bot.tree.sync(guild=guild)
-    print(f"✅ Synced commands to guild {guild.id}")
-    print(f"Logged in as {bot.user}")
-
+    await bot.tree.sync()
+    print(f"✅ Logged in as {bot.user}")
 # -------- MESSAGE XP --------
 @bot.event
 async def on_message(message):
@@ -194,6 +191,7 @@ async def on_member_update(before, after):
 
 # ================= SLASH COMMANDS =================
 # ================= SLASH COMMANDS =================
+# ================= SLASH COMMANDS =================
 
 @bot.tree.command(name="profile", description="View your profile")
 async def profile(interaction: discord.Interaction):
@@ -245,9 +243,9 @@ async def voicetop(interaction: discord.Interaction):
         text += f"**{i}.** {name} — {hours}h {minutes}m\n"
 
     await interaction.response.send_message(text)
-
 # ================= RUN =====================
 bot.run(TOKEN)
+
 
 
 
