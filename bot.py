@@ -5,14 +5,12 @@ import time
 import sqlite3
 import random
 
-# ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 WELCOME_CHANNEL_ID = 1414762426758463598
 GOODBYE_CHANNEL_ID = 1460384380437659710
 LOG_CHANNEL_ID = 1460366893994086554
 APPLICATION_ID = 1460013127063175229
-# =========================================
 
 # ================= DATABASE =================
 db = sqlite3.connect("bot.db", check_same_thread=False)
@@ -28,21 +26,14 @@ CREATE TABLE IF NOT EXISTS users (
 )
 """)
 db.commit()
-# ==========================================
 
 # ================= INTENTS =================
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 intents.voice_states = True
-# ==========================================
 
-# ================= BOT =====================
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents,
-    application_id=APPLICATION_ID
-)
+bot = commands.Bot(command_prefix="!", intents=intents, application_id=APPLICATION_ID)
 
 voice_sessions = {}
 message_cooldown = {}
@@ -52,17 +43,6 @@ daily_cooldown = {}
 def ensure_user(user_id):
     cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
     db.commit()
-
-async def level_up_announce(user_id, level):
-    channel = bot.get_channel(LOG_CHANNEL_ID)
-    if channel:
-        user = bot.get_user(user_id)
-        if user:
-            await channel.send(
-                f"🎉 LEVEL UP!\n"
-                f"👤 {user.mention}\n"
-                f"⭐ New Level: {level}"
-            )
 
 def add_coins(user_id, amount):
     ensure_user(user_id)
@@ -79,27 +59,28 @@ async def add_xp(user_id, amount):
 
     xp += amount
     needed = level * 100
-    leveled_up = False
+    leveled = False
 
     while xp >= needed:
         xp -= needed
         level += 1
         needed = level * 100
-        leveled_up = True
+        leveled = True
 
     cursor.execute("UPDATE users SET xp = ?, level = ? WHERE user_id = ?", (xp, level, user_id))
     db.commit()
 
-    if leveled_up:
-        await level_up_announce(user_id, level)
+    if leveled:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        user = bot.get_user(user_id)
+        if channel and user:
+            await channel.send(f"🎉 LEVEL UP!\n👤 {user.mention}\n⭐ Level {level}")
 
-# ==========================================
-
-# ================= EVENTS ==================
+# ================= EVENTS =================
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ Logged in as {bot.user}")
+    print(f"Logged in as {bot.user}")
 
 @bot.event
 async def on_message(message):
@@ -118,13 +99,15 @@ async def on_message(message):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = now
-        ensure_user(member.id)
+        if log:
+            await log.send(f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}")
 
-    if before.channel is not None and after.channel is None:
+    if before.channel and after.channel is None:
         start = voice_sessions.pop(member.id, None)
         if not start:
             return
@@ -136,29 +119,30 @@ async def on_voice_state_update(member, before, after):
             await add_xp(member.id, minutes * 10)
             add_coins(member.id, minutes * 5)
 
-        cursor.execute(
-            "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
-            (duration, member.id)
-        )
+        cursor.execute("UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+                       (duration, member.id))
         db.commit()
+
+        h = duration // 3600
+        m = (duration % 3600) // 60
+        s = duration % 60
+
+        if log:
+            await log.send(f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m {s}s")
 
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
     if ch:
-        await ch.send(
-            f"🎉 Welcome {member.mention}!",
-            file=discord.File("images/welcome.png")
-        )
+        await ch.send(f"🎉 Welcome {member.mention}!",
+                      file=discord.File("images/welcome.png"))
 
 @bot.event
 async def on_member_remove(member):
     ch = bot.get_channel(GOODBYE_CHANNEL_ID)
     if ch:
-        await ch.send(
-            f"👋 {member.name} left the server",
-            file=discord.File("images/goodbye.png")
-        )
+        await ch.send(f"👋 {member.name} left the server",
+                      file=discord.File("images/goodbye.png"))
 
 @bot.event
 async def on_member_update(before, after):
@@ -179,10 +163,8 @@ async def on_member_update(before, after):
 @bot.tree.command(name="profile")
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
-    cursor.execute(
-        "SELECT xp, level, voice_time, coins FROM users WHERE user_id = ?",
-        (interaction.user.id,)
-    )
+    cursor.execute("SELECT xp, level, voice_time, coins FROM users WHERE user_id = ?",
+                   (interaction.user.id,))
     xp, level, voice, coins = cursor.fetchone()
 
     needed = level * 100
@@ -204,9 +186,7 @@ async def profile(interaction: discord.Interaction):
 
 @bot.tree.command(name="voicetop")
 async def voicetop(interaction: discord.Interaction):
-    cursor.execute(
-        "SELECT user_id, voice_time FROM users ORDER BY voice_time DESC LIMIT 10"
-    )
+    cursor.execute("SELECT user_id, voice_time FROM users ORDER BY voice_time DESC LIMIT 10")
     rows = cursor.fetchall()
 
     text = "🏆 Voice Leaderboard\n\n"
@@ -224,38 +204,7 @@ async def balance(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
     cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
     coins = cursor.fetchone()[0]
-    await interaction.response.send_message(f"💰 You have {coins} coins.")
-
-@bot.tree.command(name="daily")
-async def daily(interaction: discord.Interaction):
-    now = time.time()
-    last = daily_cooldown.get(interaction.user.id, 0)
-
-    if now - last < 86400:
-        await interaction.response.send_message("⏳ Already claimed today.", ephemeral=True)
-        return
-
-    reward = 200
-    add_coins(interaction.user.id, reward)
-    daily_cooldown[interaction.user.id] = now
-    await interaction.response.send_message(f"💰 You claimed {reward} coins!")
-
-@bot.tree.command(name="gamble")
-async def gamble(interaction: discord.Interaction, amount: int):
-    ensure_user(interaction.user.id)
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
-    coins = cursor.fetchone()[0]
-
-    if amount <= 0 or amount > coins:
-        await interaction.response.send_message("❌ Invalid amount.", ephemeral=True)
-        return
-
-    if random.randint(1, 2) == 1:
-        add_coins(interaction.user.id, amount)
-        await interaction.response.send_message(f"🎉 You won {amount} coins!")
-    else:
-        add_coins(interaction.user.id, -amount)
-        await interaction.response.send_message(f"💀 You lost {amount} coins.")
+    await interaction.response.send_message(f"💰 {coins} coins")
 
 @bot.tree.command(name="addcoins")
 async def addcoins(interaction: discord.Interaction, user: discord.Member, amount: int):
@@ -273,46 +222,26 @@ async def removecoins(interaction: discord.Interaction, user: discord.Member, am
     add_coins(user.id, -amount)
     await interaction.response.send_message(f"Removed {amount} coins from {user.mention}")
 
-@bot.tree.command(name="shop")
-async def shop(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "🛒 SHOP\n\n"
-        "xpboost - 500 coins (+50 XP)\n"
-        "lottery - 1000 coins (50% win 2000 coins)"
-    )
-
-@bot.tree.command(name="buy")
-async def buy(interaction: discord.Interaction, item: str):
+@bot.tree.command(name="gamble")
+async def gamble(interaction: discord.Interaction, amount: int):
     ensure_user(interaction.user.id)
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
+    coins = cursor.fetchone()[0]
 
-    if item.lower() == "xpboost":
-        cost = 500
-        cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
-        coins = cursor.fetchone()[0]
-        if coins < cost:
-            await interaction.response.send_message("Not enough coins.")
-            return
-        add_coins(interaction.user.id, -cost)
-        await add_xp(interaction.user.id, 50)
-        await interaction.response.send_message("You bought XP Boost!")
+    if amount <= 0 or amount > coins:
+        await interaction.response.send_message("Invalid amount.", ephemeral=True)
+        return
 
-    elif item.lower() == "lottery":
-        cost = 1000
-        cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
-        coins = cursor.fetchone()[0]
-        if coins < cost:
-            await interaction.response.send_message("Not enough coins.")
-            return
-        add_coins(interaction.user.id, -cost)
-        if random.randint(1, 2) == 1:
-            add_coins(interaction.user.id, 2000)
-            await interaction.response.send_message("🎉 You won the lottery!")
-        else:
-            await interaction.response.send_message("💀 You lost the lottery.")
+    if random.randint(1, 4) == 1:
+        add_coins(interaction.user.id, amount)
+        await interaction.response.send_message(f"🎉 You won {amount} coins! (25%)")
+    else:
+        add_coins(interaction.user.id, -amount)
+        await interaction.response.send_message(f"💀 You lost {amount} coins.")
 
 @bot.tree.command(name="jl5")
 async def jl5(interaction: discord.Interaction):
-    await interaction.response.send_message("Your ASCII art here")
+    art = """PASTE YOUR ASCII ART HERE EXACTLY"""
+    await interaction.response.send_message(f"```{art}```")
 
-# ================= RUN =====================
 bot.run(TOKEN)
