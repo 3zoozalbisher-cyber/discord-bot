@@ -206,21 +206,81 @@ async def balance(interaction: discord.Interaction):
     coins = cursor.fetchone()[0]
     await interaction.response.send_message(f"💰 {coins} coins")
 
-@bot.tree.command(name="addcoins")
-async def addcoins(interaction: discord.Interaction, user: discord.Member, amount: int):
+@bot.tree.command(name="add", description="Add xp, coins, or levels (Admin only)")
+async def add(
+    interaction: discord.Interaction,
+    user: discord.Member,
+    type: str,
+    amount: int
+):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("No permission.", ephemeral=True)
+        await interaction.response.send_message("❌ No permission.", ephemeral=True)
         return
-    add_coins(user.id, amount)
-    await interaction.response.send_message(f"Added {amount} coins to {user.mention}")
 
-@bot.tree.command(name="removecoins")
-async def removecoins(interaction: discord.Interaction, user: discord.Member, amount: int):
+    type = type.lower()
+
+    if type == "xp":
+        await add_xp(user.id, amount)
+        await interaction.response.send_message(f"✅ Added {amount} XP to {user.mention}")
+
+    elif type == "coins":
+        add_coins(user.id, amount)
+        await interaction.response.send_message(f"💰 Added {amount} coins to {user.mention}")
+
+    elif type == "level":
+        ensure_user(user.id)
+        cursor.execute("SELECT level FROM users WHERE user_id = ?", (user.id,))
+        level = cursor.fetchone()[0]
+        level += amount
+        if level < 1:
+            level = 1
+        cursor.execute("UPDATE users SET level = ?, xp = 0 WHERE user_id = ?", (level, user.id))
+        db.commit()
+        await interaction.response.send_message(f"⭐ {user.mention} is now level {level}")
+
+    else:
+        await interaction.response.send_message("Type must be xp, coins, or level.", ephemeral=True)
+
+
+@bot.tree.command(name="remove", description="Remove xp, coins, or levels (Admin only)")
+async def remove(
+    interaction: discord.Interaction,
+    user: discord.Member,
+    type: str,
+    amount: int
+):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("No permission.", ephemeral=True)
+        await interaction.response.send_message("❌ No permission.", ephemeral=True)
         return
-    add_coins(user.id, -amount)
-    await interaction.response.send_message(f"Removed {amount} coins from {user.mention}")
+
+    type = type.lower()
+
+    if type == "xp":
+        ensure_user(user.id)
+        cursor.execute("SELECT xp FROM users WHERE user_id = ?", (user.id,))
+        xp = cursor.fetchone()[0]
+        xp = max(0, xp - amount)
+        cursor.execute("UPDATE users SET xp = ? WHERE user_id = ?", (xp, user.id))
+        db.commit()
+        await interaction.response.send_message(f"❌ Removed {amount} XP from {user.mention}")
+
+    elif type == "coins":
+        add_coins(user.id, -amount)
+        await interaction.response.send_message(f"💰 Removed {amount} coins from {user.mention}")
+
+    elif type == "level":
+        ensure_user(user.id)
+        cursor.execute("SELECT level FROM users WHERE user_id = ?", (user.id,))
+        level = cursor.fetchone()[0]
+        level -= amount
+        if level < 1:
+            level = 1
+        cursor.execute("UPDATE users SET level = ?, xp = 0 WHERE user_id = ?", (level, user.id))
+        db.commit()
+        await interaction.response.send_message(f"⭐ {user.mention} is now level {level}")
+
+    else:
+        await interaction.response.send_message("Type must be xp, coins, or level.", ephemeral=True)
 
 @bot.tree.command(name="gamble")
 async def gamble(interaction: discord.Interaction, amount: int):
@@ -269,4 +329,5 @@ async def jl5(interaction: discord.Interaction):
     await interaction.response.send_message(f"```{art}```")
 
 bot.run(TOKEN)
+
 
