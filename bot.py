@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import time
 import sqlite3
+import random
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -10,7 +11,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 WELCOME_CHANNEL_ID = 1414762426758463598
 GOODBYE_CHANNEL_ID = 1460384380437659710
 LOG_CHANNEL_ID = 1460366893994086554
-
 APPLICATION_ID = 1460013127063175229
 # =========================================
 
@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     xp INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
-    voice_time INTEGER DEFAULT 0
+    voice_time INTEGER DEFAULT 0,
+    coins INTEGER DEFAULT 0
 )
 """)
 db.commit()
@@ -42,43 +43,56 @@ bot = commands.Bot(
     intents=intents,
     application_id=APPLICATION_ID
 )
-# ==========================================
 
-# ================= STATE ===================
 voice_sessions = {}
 message_cooldown = {}
-# ==========================================
+daily_cooldown = {}
 
 # ================= HELPERS =================
 def ensure_user(user_id):
-    cursor.execute(
-        "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
-        (user_id,)
-    )
+    cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
     db.commit()
 
-def add_xp(user_id, amount):
-    ensure_user(user_id)
+async def level_up_announce(user_id, level):
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if channel:
+        user = bot.get_user(user_id)
+        if user:
+            await channel.send(
+                f"🎉 LEVEL UP!\n"
+                f"👤 {user.mention}\n"
+                f"⭐ New Level: {level}"
+            )
 
-    cursor.execute(
-        "SELECT xp, level FROM users WHERE user_id = ?",
-        (user_id,)
-    )
+def add_coins(user_id, amount):
+    ensure_user(user_id)
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+    coins = cursor.fetchone()[0]
+    coins = max(0, coins + amount)
+    cursor.execute("UPDATE users SET coins = ? WHERE user_id = ?", (coins, user_id))
+    db.commit()
+
+async def add_xp(user_id, amount):
+    ensure_user(user_id)
+    cursor.execute("SELECT xp, level FROM users WHERE user_id = ?", (user_id,))
     xp, level = cursor.fetchone()
 
     xp += amount
     needed = level * 100
+    leveled_up = False
 
     while xp >= needed:
         xp -= needed
         level += 1
         needed = level * 100
+        leveled_up = True
 
-    cursor.execute(
-        "UPDATE users SET xp = ?, level = ? WHERE user_id = ?",
-        (xp, level, user_id)
-    )
+    cursor.execute("UPDATE users SET xp = ?, level = ? WHERE user_id = ?", (xp, level, user_id))
     db.commit()
+
+    if leveled_up:
+        await level_up_announce(user_id, level)
+
 # ==========================================
 
 # ================= EVENTS ==================
@@ -87,7 +101,6 @@ async def on_ready():
     await bot.tree.sync()
     print(f"✅ Logged in as {bot.user}")
 
-# -------- MESSAGE XP --------
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -97,34 +110,20 @@ async def on_message(message):
     last = message_cooldown.get(message.author.id, 0)
 
     if now - last >= 30:
-        add_xp(message.author.id, 5)
+        await add_xp(message.author.id, 5)
+        add_coins(message.author.id, 3)
         message_cooldown[message.author.id] = now
 
     await bot.process_commands(message)
 
-# -------- VOICE --------
 @bot.event
 async def on_voice_state_update(member, before, after):
-    log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
-    # JOIN
     if before.channel is None and after.channel is not None:
-        if member.id in voice_sessions:
-            return
-
         voice_sessions[member.id] = now
         ensure_user(member.id)
 
-        if log:
-            await log.send(
-                f"🔊 joined voice channel\n"
-                f"👤 {member.mention}\n"
-                f"🎧 {after.channel.name}"
-            )
-        return
-
-    # LEAVE
     if before.channel is not None and after.channel is None:
         start = voice_sessions.pop(member.id, None)
         if not start:
@@ -134,7 +133,8 @@ async def on_voice_state_update(member, before, after):
         minutes = duration // 60
 
         if minutes > 0:
-            add_xp(member.id, minutes * 10)
+            await add_xp(member.id, minutes * 10)
+            add_coins(member.id, minutes * 5)
 
         cursor.execute(
             "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
@@ -142,20 +142,6 @@ async def on_voice_state_update(member, before, after):
         )
         db.commit()
 
-        h = duration // 3600
-        m = (duration % 3600) // 60
-        s = duration % 60
-
-        if log:
-            await log.send(
-                f"🔇 left voice channel\n"
-                f"👤 {member.mention}\n"
-                f"🎧 {before.channel.name}\n"
-                f"⏱️ {h}h {m}m {s}s"
-            )
-        return
-
-# -------- MEMBER JOIN --------
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
@@ -165,7 +151,6 @@ async def on_member_join(member):
             file=discord.File("images/welcome.png")
         )
 
-# -------- MEMBER LEAVE --------
 @bot.event
 async def on_member_remove(member):
     ch = bot.get_channel(GOODBYE_CHANNEL_ID)
@@ -175,7 +160,6 @@ async def on_member_remove(member):
             file=discord.File("images/goodbye.png")
         )
 
-# -------- ROLE LOG --------
 @bot.event
 async def on_member_update(before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
@@ -184,27 +168,22 @@ async def on_member_update(before, after):
 
     for role in set(after.roles) - set(before.roles):
         if not role.is_default():
-            await log.send(
-                f"✅ added role\n👤 {after.mention}\n🎭 {role.name}"
-            )
+            await log.send(f"✅ added role\n👤 {after.mention}\n🎭 {role.name}")
 
     for role in set(before.roles) - set(after.roles):
         if not role.is_default():
-            await log.send(
-                f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}"
-            )
+            await log.send(f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}")
 
 # ================= SLASH COMMANDS =================
 
-@bot.tree.command(name="profile", description="View your profile")
+@bot.tree.command(name="profile")
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
-
     cursor.execute(
-        "SELECT xp, level, voice_time FROM users WHERE user_id = ?",
+        "SELECT xp, level, voice_time, coins FROM users WHERE user_id = ?",
         (interaction.user.id,)
     )
-    xp, level, voice = cursor.fetchone()
+    xp, level, voice, coins = cursor.fetchone()
 
     needed = level * 100
     progress = int((xp / needed) * 20)
@@ -219,113 +198,121 @@ async def profile(interaction: discord.Interaction):
         f"⭐ Level: {level}\n"
         f"📊 XP: {xp}/{needed}\n"
         f"{bar}\n"
-        f"🎙️ Voice: {h}h {m}m {s}s"
+        f"🎙️ Voice: {h}h {m}m {s}s\n"
+        f"💰 Coins: {coins}"
     )
 
-
-@bot.tree.command(name="voicetop", description="Top voice time leaderboard")
+@bot.tree.command(name="voicetop")
 async def voicetop(interaction: discord.Interaction):
     cursor.execute(
         "SELECT user_id, voice_time FROM users ORDER BY voice_time DESC LIMIT 10"
     )
     rows = cursor.fetchall()
 
-    if not rows:
-        await interaction.response.send_message("No voice data yet.")
-        return
-
-    text = "🏆 **Voice Time Leaderboard**\n\n"
-
-    for i, (user_id, seconds) in enumerate(rows, start=1):
-        member = interaction.guild.get_member(user_id)
-
+    text = "🏆 Voice Leaderboard\n\n"
+    for i, (uid, seconds) in enumerate(rows, start=1):
+        member = interaction.guild.get_member(uid)
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
-
-        name = member.name if member else f"User {user_id}"
-        text += f"**{i}.** {name} — {hours}h {minutes}m\n"
+        name = member.name if member else f"User {uid}"
+        text += f"{i}. {name} — {hours}h {minutes}m\n"
 
     await interaction.response.send_message(text)
 
-@bot.tree.command(name="setlevel", description="Set a user's level (Admin only)")
-@discord.app_commands.describe(user="User to modify", level="New level")
-async def setlevel(interaction: discord.Interaction, user: discord.Member, level: int):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+@bot.tree.command(name="balance")
+async def balance(interaction: discord.Interaction):
+    ensure_user(interaction.user.id)
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
+    coins = cursor.fetchone()[0]
+    await interaction.response.send_message(f"💰 You have {coins} coins.")
+
+@bot.tree.command(name="daily")
+async def daily(interaction: discord.Interaction):
+    now = time.time()
+    last = daily_cooldown.get(interaction.user.id, 0)
+
+    if now - last < 86400:
+        await interaction.response.send_message("⏳ Already claimed today.", ephemeral=True)
         return
 
-    if level < 1:
-        level = 1
+    reward = 200
+    add_coins(interaction.user.id, reward)
+    daily_cooldown[interaction.user.id] = now
+    await interaction.response.send_message(f"💰 You claimed {reward} coins!")
 
-    ensure_user(user.id)
+@bot.tree.command(name="gamble")
+async def gamble(interaction: discord.Interaction, amount: int):
+    ensure_user(interaction.user.id)
+    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
+    coins = cursor.fetchone()[0]
 
-    cursor.execute(
-        "UPDATE users SET level = ?, xp = 0 WHERE user_id = ?",
-        (level, user.id)
-    )
-    db.commit()
-
-    await interaction.response.send_message(
-        f"✅ {user.mention} is now level {level}"
-    )
-
-
-@bot.tree.command(name="addlevel", description="Add levels to a user (Admin only)")
-async def addlevel(interaction: discord.Interaction, user: discord.Member, amount: int):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+    if amount <= 0 or amount > coins:
+        await interaction.response.send_message("❌ Invalid amount.", ephemeral=True)
         return
 
-    ensure_user(user.id)
+    if random.randint(1, 2) == 1:
+        add_coins(interaction.user.id, amount)
+        await interaction.response.send_message(f"🎉 You won {amount} coins!")
+    else:
+        add_coins(interaction.user.id, -amount)
+        await interaction.response.send_message(f"💀 You lost {amount} coins.")
 
-    cursor.execute(
-        "SELECT level FROM users WHERE user_id = ?",
-        (user.id,)
-    )
-    level = cursor.fetchone()[0]
-
-    level += amount
-    if level < 1:
-        level = 1
-
-    cursor.execute(
-        "UPDATE users SET level = ?, xp = 0 WHERE user_id = ?",
-        (level, user.id)
-    )
-    db.commit()
-
-    await interaction.response.send_message(
-        f"✅ {user.mention} is now level {level}"
-    )
-
-
-@bot.tree.command(name="removelevel", description="Remove levels from a user (Admin only)")
-async def removelevel(interaction: discord.Interaction, user: discord.Member, amount: int):
+@bot.tree.command(name="addcoins")
+async def addcoins(interaction: discord.Interaction, user: discord.Member, amount: int):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+        await interaction.response.send_message("No permission.", ephemeral=True)
         return
+    add_coins(user.id, amount)
+    await interaction.response.send_message(f"Added {amount} coins to {user.mention}")
 
-    ensure_user(user.id)
+@bot.tree.command(name="removecoins")
+async def removecoins(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("No permission.", ephemeral=True)
+        return
+    add_coins(user.id, -amount)
+    await interaction.response.send_message(f"Removed {amount} coins from {user.mention}")
 
-    cursor.execute(
-        "SELECT level FROM users WHERE user_id = ?",
-        (user.id,)
-    )
-    level = cursor.fetchone()[0]
-
-    level -= amount
-    if level < 1:
-        level = 1
-
-    cursor.execute(
-        "UPDATE users SET level = ?, xp = 0 WHERE user_id = ?",
-        (level, user.id)
-    )
-    db.commit()
-
+@bot.tree.command(name="shop")
+async def shop(interaction: discord.Interaction):
     await interaction.response.send_message(
-        f"✅ {user.mention} is now level {level}"
+        "🛒 SHOP\n\n"
+        "xpboost - 500 coins (+50 XP)\n"
+        "lottery - 1000 coins (50% win 2000 coins)"
     )
+
+@bot.tree.command(name="buy")
+async def buy(interaction: discord.Interaction, item: str):
+    ensure_user(interaction.user.id)
+
+    if item.lower() == "xpboost":
+        cost = 500
+        cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
+        coins = cursor.fetchone()[0]
+        if coins < cost:
+            await interaction.response.send_message("Not enough coins.")
+            return
+        add_coins(interaction.user.id, -cost)
+        await add_xp(interaction.user.id, 50)
+        await interaction.response.send_message("You bought XP Boost!")
+
+    elif item.lower() == "lottery":
+        cost = 1000
+        cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
+        coins = cursor.fetchone()[0]
+        if coins < cost:
+            await interaction.response.send_message("Not enough coins.")
+            return
+        add_coins(interaction.user.id, -cost)
+        if random.randint(1, 2) == 1:
+            add_coins(interaction.user.id, 2000)
+            await interaction.response.send_message("🎉 You won the lottery!")
+        else:
+            await interaction.response.send_message("💀 You lost the lottery.")
+
+@bot.tree.command(name="jl5")
+async def jl5(interaction: discord.Interaction):
+    await interaction.response.send_message("Your ASCII art here")
+
 # ================= RUN =====================
 bot.run(TOKEN)
-
