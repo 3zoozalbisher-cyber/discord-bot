@@ -247,5 +247,85 @@ async def voicetop(interaction: discord.Interaction):
 
     await interaction.response.send_message(text)
 
+@bot.tree.command(name="setlevel", description="Set a user's level (Admin only)")
+@discord.app_commands.describe(user="User to modify", level="New level")
+async def setlevel(interaction: discord.Interaction, user: discord.Member, level: int):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+        return
+
+    if level < 1:
+        level = 1
+
+    ensure_user(user.id)
+
+    cursor.execute(
+        "UPDATE users SET level = ?, xp = 0 WHERE user_id = ?",
+        (level, user.id)
+    )
+    db.commit()
+
+    await interaction.response.send_message(
+        f"✅ {user.mention} is now level {level}"
+    )
+
+
+@bot.tree.command(name="addlevel", description="Add levels to a user (Admin only)")
+async def addlevel(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+        return
+
+    ensure_user(user.id)
+
+    cursor.execute(
+        "SELECT level FROM users WHERE user_id = ?",
+        (user.id,)
+    )
+    level = cursor.fetchone()[0]
+
+    level += amount
+    if level < 1:
+        level = 1
+
+    cursor.execute(
+        "UPDATE users SET level = ?, xp = 0 WHERE user_id = ?",
+        (level, user.id)
+    )
+    db.commit()
+
+    await interaction.response.send_message(
+        f"✅ {user.mention} is now level {level}"
+    )
+
+
+@bot.tree.command(name="removelevel", description="Remove levels from a user (Admin only)")
+async def removelevel(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+        return
+
+    ensure_user(user.id)
+
+    cursor.execute(
+        "SELECT level FROM users WHERE user_id = ?",
+        (user.id,)
+    )
+    level = cursor.fetchone()[0]
+
+    level -= amount
+    if level < 1:
+        level = 1
+
+    cursor.execute(
+        "UPDATE users SET level = ?, xp = 0 WHERE user_id = ?",
+        (level, user.id)
+    )
+    db.commit()
+
+    await interaction.response.send_message(
+        f"✅ {user.mention} is now level {level}"
+    )
 # ================= RUN =====================
 bot.run(TOKEN)
+
