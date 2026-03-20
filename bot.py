@@ -370,8 +370,10 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 
 @bot.tree.command(name="joinvc", description="Join your VC and deafen")
 async def joinvc(interaction: discord.Interaction):
+    await interaction.response.defer()  # 🔥 THIS FIXES IT
+
     if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("❌ You must be in a voice channel.", ephemeral=True)
+        await interaction.followup.send("❌ You must be in a voice channel.")
         return
 
     channel = interaction.user.voice.channel
@@ -384,18 +386,7 @@ async def joinvc(interaction: discord.Interaction):
 
     await vc.edit(self_deaf=True)
 
-    await interaction.response.send_message(f"🎧 Joined {channel.name} and deafened.")
-
-
-@bot.tree.command(name="leavevc", description="Leave voice channel")
-async def leavevc(interaction: discord.Interaction):
-    vc = interaction.guild.voice_client
-    if vc:
-        await vc.disconnect()
-        await interaction.response.send_message("👋 Left voice channel.")
-    else:
-        await interaction.response.send_message("❌ Not in a voice channel.", ephemeral=True)
-
+    await interaction.followup.send(f"🎧 Joined {channel.name} and deafened.")
 bot.run(TOKEN)
 
 
