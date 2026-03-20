@@ -160,6 +160,37 @@ async def on_member_update(before, after):
 
 # ================= SLASH COMMANDS =================
 
+
+@bot.tree.command(name="addvc", description="Add voice time to a user (Admin only)")
+async def addvc(
+    interaction: discord.Interaction,
+    user: discord.Member,
+    hours: int = 0,
+    minutes: int = 0
+):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return
+
+    total_seconds = (hours * 3600) + (minutes * 60)
+
+    if total_seconds <= 0:
+        await interaction.response.send_message("❌ Enter valid time.", ephemeral=True)
+        return
+
+    ensure_user(user.id)
+
+    cursor.execute(
+        "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+        (total_seconds, user.id)
+    )
+    db.commit()
+
+    await interaction.response.send_message(
+        f"⏱️ Added {hours}h {minutes}m to {user.mention}"
+    )
+
+
 @bot.tree.command(name="profile")
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
