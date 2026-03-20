@@ -399,9 +399,9 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 
 # ================= VOICE =================
 
-@bot.tree.command(name="joinvc", description="Join your VC and deafen")
+@bot.tree.command(name="joinvc", description="Fast join VC and deafen")
 async def joinvc(interaction: discord.Interaction):
-    await interaction.response.defer()  # 🔥 THIS FIXES IT
+    await interaction.response.defer()
 
     if not interaction.user.voice or not interaction.user.voice.channel:
         await interaction.followup.send("❌ You must be in a voice channel.")
@@ -410,14 +410,25 @@ async def joinvc(interaction: discord.Interaction):
     channel = interaction.user.voice.channel
 
     vc = interaction.guild.voice_client
-    if vc:
-        await vc.move_to(channel)
-    else:
-        vc = await channel.connect()
 
-    await vc.edit(self_deaf=True)
+    # ⚡ instant feedback
+    await interaction.followup.send(f"⏳ Joining {channel.name}...")
+
+    try:
+        if vc and vc.is_connected():
+            await vc.move_to(channel)
+        else:
+            vc = await channel.connect(timeout=5, reconnect=True)
+
+        await vc.edit(self_deaf=True)
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to join: {e}")
+        return
 
     await interaction.followup.send(f"🎧 Joined {channel.name} and deafened.")
+
+
 bot.run(TOKEN)
 
 
