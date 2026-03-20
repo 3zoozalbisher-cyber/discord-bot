@@ -328,6 +328,74 @@ async def jl5(interaction: discord.Interaction):
 ⠀⠀⠉⠉⠙⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠁⠛⠛⠛⠛⠛⠛⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠁"""
     await interaction.response.send_message(f"```{art}```")
 
+
+from datetime import timedelta
+
+# ================= MODERATION =================
+
+@bot.tree.command(name="kick", description="Kick a user")
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason"):
+    if not interaction.user.guild_permissions.kick_members:
+        await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return
+
+    await member.kick(reason=reason)
+    await interaction.response.send_message(f"👢 {member.mention} has been kicked.\nReason: {reason}")
+
+
+@bot.tree.command(name="ban", description="Ban a user")
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason"):
+    if not interaction.user.guild_permissions.ban_members:
+        await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return
+
+    await member.ban(reason=reason)
+    await interaction.response.send_message(f"🔨 {member.mention} has been banned.\nReason: {reason}")
+
+
+@bot.tree.command(name="timeout", description="Timeout a user (minutes)")
+async def timeout(interaction: discord.Interaction, member: discord.Member, minutes: int):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return
+
+    duration = timedelta(minutes=minutes)
+    await member.timeout(duration)
+
+    await interaction.response.send_message(
+        f"⏳ {member.mention} has been timed out for {minutes} minutes."
+    )
+
+# ================= VOICE =================
+
+@bot.tree.command(name="joinvc", description="Join your VC and deafen")
+async def joinvc(interaction: discord.Interaction):
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("❌ You must be in a voice channel.", ephemeral=True)
+        return
+
+    channel = interaction.user.voice.channel
+
+    vc = interaction.guild.voice_client
+    if vc:
+        await vc.move_to(channel)
+    else:
+        vc = await channel.connect()
+
+    await vc.edit(self_deaf=True)
+
+    await interaction.response.send_message(f"🎧 Joined {channel.name} and deafened.")
+
+
+@bot.tree.command(name="leavevc", description="Leave voice channel")
+async def leavevc(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc:
+        await vc.disconnect()
+        await interaction.response.send_message("👋 Left voice channel.")
+    else:
+        await interaction.response.send_message("❌ Not in a voice channel.", ephemeral=True)
+
 bot.run(TOKEN)
 
 
