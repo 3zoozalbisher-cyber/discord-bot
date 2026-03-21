@@ -410,22 +410,19 @@ async def joinvc(interaction: discord.Interaction):
     channel = interaction.user.voice.channel
     vc = interaction.guild.voice_client
 
-    await interaction.followup.send(f"⏳ Joining {channel.name}...")
-
     try:
         if vc and vc.is_connected():
             await vc.move_to(channel)
         else:
             vc = await channel.connect()
 
-        # ✅ FIXED DEAFEN
         await interaction.guild.change_voice_state(
             channel=channel,
             self_deaf=True
         )
 
     except Exception as e:
-        await interaction.followup.send(f"❌ Failed: {e}")
+        await interaction.followup.send(f"❌ Error: {e}")
         return
 
     await interaction.followup.send(f"🎧 Joined {channel.name} and deafened.")
