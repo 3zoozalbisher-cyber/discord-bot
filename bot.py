@@ -103,21 +103,24 @@ async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
-    # 🔊 JOIN
-    if before.channel is None and after.channel is not None:
-        voice_sessions[member.id] = now
+  # 🔊 JOIN
+if before.channel is None and after.channel is not None:
+    voice_sessions[member.id] = now
 
-        if log:
-            await log.send(
-                f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
-            )
-        return
+    if log:
+        await log.send(
+            f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
+        )
+    return
 
     # 🔇 LEAVE
     if before.channel and after.channel is None:
-        start = voice_sessions.pop(member.id, None)
+      start = voice_sessions.pop(member.id, None)
+
         if not start:
-            return
+            duration = 0
+        else:
+            duration = int(now - start)
 
         # 🔌 DISCONNECT CHECK
         disconnected_by = None
@@ -166,21 +169,29 @@ async def on_member_remove(member):
     if ch:
         await ch.send(f"👋 {member.name} left the server",
                       file=discord.File("images/goodbye.png"))
-
 @bot.event
 async def on_member_update(before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     if not log:
         return
 
+    # 🎭 ROLE ADDED
     for role in set(after.roles) - set(before.roles):
         if not role.is_default():
             await log.send(f"✅ added role\n👤 {after.mention}\n🎭 {role.name}")
 
+    # 🎭 ROLE REMOVED
     for role in set(before.roles) - set(after.roles):
         if not role.is_default():
             await log.send(f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}")
 
+    # ⏳ TIMEOUT
+    if before.communication_disabled_until != after.communication_disabled_until:
+        async for entry in after.guild.audit_logs(limit=1):
+            if entry.target.id == after.id:
+                await log.send(
+                    f"⏳ TIMEOUT\n👤 {after}\n🛠️ By: {entry.user}"
+                )
 # ================= SLASH COMMANDS =================
 
 
@@ -483,19 +494,6 @@ async def on_member_ban(guild, user):
             )
 
 
-# 🔴 TIMEOUT
-@bot.event
-async def on_member_update(before, after):
-    log = bot.get_channel(LOG_CHANNEL_ID)
-    if not log:
-        return
-
-    if before.communication_disabled_until != after.communication_disabled_until:
-        async for entry in after.guild.audit_logs(limit=1):
-            if entry.target.id == after.id:
-                await log.send(
-                    f"⏳ **TIMEOUT**\n👤 {after}\n🛠️ By: {entry.user}"
-                )
 
 
 
