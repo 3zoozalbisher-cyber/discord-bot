@@ -5,6 +5,7 @@ import time
 import sqlite3
 import random
 from discord.ui import View, Button
+import asyncio
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -123,7 +124,10 @@ async def on_voice_state_update(member, before, after):
             duration = int(now - start)
 
         disconnected_by = None
-        async for entry in member.guild.audit_logs(limit=1):
+
+await asyncio.sleep(1)  # ← THIS FIXES EVERYTHING
+
+async for entry in member.guild.audit_logs(limit=1):
             if entry.target.id == member.id:
                 if entry.action.name == "member_disconnect":
                     disconnected_by = entry.user
