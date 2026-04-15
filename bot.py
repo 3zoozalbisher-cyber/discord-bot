@@ -115,18 +115,18 @@ async def on_voice_state_update(member, before, after):
         return
 
     # LEAVE
-    if before.channel and after.channel is None:
-        start = voice_sessions.pop(member.id, None)
+   start = voice_sessions.pop(member.id, None)
 
-        duration = int(now - start) if start else 0
+duration = int(now - start) if start else 0
 
-        h = duration // 3600
-        m = (duration % 3600) // 60
+h = duration // 3600
+m = (duration % 3600) // 60
+s = duration % 60
 
-        if log:
-            await log.send(
-                f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
-            )
+if log:
+    await log.send(
+        f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m {s}s"
+    )
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
