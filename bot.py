@@ -114,14 +114,13 @@ if before.channel is None and after.channel is not None:
     return
 
     # 🔇 LEAVE
-    if before.channel and after.channel is None:
-      start = voice_sessions.pop(member.id, None)
+   if before.channel and after.channel is None:
+    start = voice_sessions.pop(member.id, None)
 
     if not start:
-            duration = 0
-        else:
-            duration = int(now - start)
-
+        duration = 0
+    else:
+        duration = int(now - start)
         # 🔌 DISCONNECT CHECK
         disconnected_by = None
         async for entry in member.guild.audit_logs(limit=1):
