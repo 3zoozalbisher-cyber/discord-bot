@@ -102,29 +102,32 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
-if before.channel and after.channel is None:
-    start = voice_sessions.pop(member.id, None)
-    if not start:
-        return
 
-    # 🔌 DISCONNECT CHECK
-    async for entry in member.guild.audit_logs(limit=1):
-        if entry.target.id == member.id:
-            if entry.action.name == "member_disconnect":
-                if log:
-                    await log.send(
-                        f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {entry.user}"
-                    )
+    if before.channel and after.channel is None:
+        start = voice_sessions.pop(member.id, None)
+        if not start:
+            return
 
-    duration = int(now - start)
-    minutes = duration // 60
+        # 🔌 DISCONNECT CHECK
+        async for entry in member.guild.audit_logs(limit=1):
+            if entry.target.id == member.id:
+                if entry.action.name == "member_disconnect":
+                    if log:
+                        await log.send(
+                            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {entry.user}"
+                        )
 
-    if minutes > 0:
-        await add_xp(member.id, minutes * 10)
-        add_coins(member.id, minutes * 5)
+        duration = int(now - start)
+        minutes = duration // 60
 
-        cursor.execute("UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
-                       (duration, member.id))
+        if minutes > 0:
+            await add_xp(member.id, minutes * 10)
+            add_coins(member.id, minutes * 5)
+
+        cursor.execute(
+            "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+            (duration, member.id)
+        )
         db.commit()
 
         h = duration // 3600
