@@ -121,12 +121,12 @@ duration = int(now - start) if start else 0
 
 h = duration // 3600
 m = (duration % 3600) // 60
-s = duration % 60
 
 if log:
     await log.send(
-        f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m {s}s"
+        f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
     )
+    
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
