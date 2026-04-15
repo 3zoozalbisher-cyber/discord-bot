@@ -115,36 +115,36 @@ async def on_voice_state_update(member, before, after):
         return
 
     # LEAVE
-    if before.channel and after.channel is None:
-        start = voice_sessions.pop(member.id, None)
+   if before.channel and after.channel is None:
+    start = voice_sessions.pop(member.id, None)
 
-        if not start:
-            duration = 0
-        else:
-            duration = int(now - start)
+    if not start:
+        duration = 0
+    else:
+        duration = int(now - start)
 
-        disconnected_by = None
+    disconnected_by = None
 
-await asyncio.sleep(1)  # ← THIS FIXES EVERYTHING
+    await asyncio.sleep(1)
 
-async for entry in member.guild.audit_logs(limit=1):
-            if entry.target.id == member.id:
-                if entry.action.name == "member_disconnect":
-                    disconnected_by = entry.user
-                    break
+    async for entry in member.guild.audit_logs(limit=1):
+        if entry.target.id == member.id:
+            if entry.action.name == "member_disconnect":
+                disconnected_by = entry.user
+                break
 
-        h = duration // 3600
-        m = (duration % 3600) // 60
+    h = duration // 3600
+    m = (duration % 3600) // 60
 
-        if log:
-            if disconnected_by:
-                await log.send(
-                    f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
-                )
-
+    if log:
+        if disconnected_by:
             await log.send(
-                f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+                f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
             )
+
+        await log.send(
+            f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+        )
         
 @bot.event
 async def on_member_join(member):
