@@ -146,14 +146,14 @@ async def on_voice_state_update(member, before, after):
         m = (duration % 3600) // 60
 
         if log:
-            if disconnected_by:
-                await log.send(
-                    f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
-                )
-
-            await log.send(
-                f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
-            )
+    if disconnected_by:
+        await log.send(
+            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
+        )
+    else:
+        await log.send(
+            f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+        )
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
