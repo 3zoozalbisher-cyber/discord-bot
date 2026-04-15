@@ -147,7 +147,7 @@ async def on_voice_state_update(member, before, after):
 
     if log:
         if disconnected_by:
-        await log.send(
+            await log.send(
             f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
         )
     else:
