@@ -117,7 +117,7 @@ if before.channel is None and after.channel is not None:
     if before.channel and after.channel is None:
       start = voice_sessions.pop(member.id, None)
 
-        if not start:
+    if not start:
             duration = 0
         else:
             duration = int(now - start)
