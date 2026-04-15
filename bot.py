@@ -107,21 +107,21 @@ if before.channel and after.channel is None:
     if not start:
         return
 
-        # 🔌 DISCONNECT CHECK
-        async for entry in member.guild.audit_logs(limit=1):
-            if entry.target.id == member.id:
-                if entry.action.name == "member_disconnect":
-                    if log:
-                        await log.send(
-                            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {entry.user}"
-                        )
+    # 🔌 DISCONNECT CHECK
+    async for entry in member.guild.audit_logs(limit=1):
+        if entry.target.id == member.id:
+            if entry.action.name == "member_disconnect":
+                if log:
+                    await log.send(
+                        f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {entry.user}"
+                    )
 
     duration = int(now - start)
     minutes = duration // 60
 
-        if minutes > 0:
-            await add_xp(member.id, minutes * 10)
-            add_coins(member.id, minutes * 5)
+    if minutes > 0:
+        await add_xp(member.id, minutes * 10)
+        add_coins(member.id, minutes * 5)
 
         cursor.execute("UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
                        (duration, member.id))
