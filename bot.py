@@ -4,6 +4,7 @@ import os
 import time
 import sqlite3
 import random
+from discord.ui import View, Button
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -11,7 +12,7 @@ WELCOME_CHANNEL_ID = 1414762426758463598
 GOODBYE_CHANNEL_ID = 1460384380437659710
 LOG_CHANNEL_ID = 1460366893994086554
 APPLICATION_ID = 1460013127063175229
-
+TICKET_CATEGORY_ID = 1493876395200221204
 # ================= DATABASE =================
 db = sqlite3.connect("bot.db", check_same_thread=False)
 cursor = db.cursor()
@@ -426,7 +427,148 @@ async def joinvc(interaction: discord.Interaction):
         return
 
     await interaction.followup.send(f"🎧 Joined {channel.name} and deafened.")
+# ================= LOGGING =================
 
+# 🔴 KICK / LEAVE
+@bot.event
+async def on_member_remove(member):
+    log = bot.get_channel(LOG_CHANNEL_ID)
+    if not log:
+        return
+
+    async for entry in member.guild.audit_logs(limit=1):
+        if entry.target.id == member.id:
+            if entry.action.name == "kick":
+                await log.send(
+                    f"👢 **KICKED**\n👤 {member}\n🛠️ By: {entry.user}"
+                )
+                return
+
+    await log.send(f"👋 {member} left the server")
+
+
+# 🔴 BAN
+@bot.event
+async def on_member_ban(guild, user):
+    log = bot.get_channel(LOG_CHANNEL_ID)
+    if not log:
+        return
+
+    async for entry in guild.audit_logs(limit=1):
+        if entry.target.id == user.id:
+            await log.send(
+                f"🔨 **BANNED**\n👤 {user}\n🛠️ By: {entry.user}"
+            )
+
+
+# 🔴 TIMEOUT
+@bot.event
+async def on_member_update(before, after):
+    log = bot.get_channel(LOG_CHANNEL_ID)
+    if not log:
+        return
+
+    if before.communication_disabled_until != after.communication_disabled_until:
+        async for entry in after.guild.audit_logs(limit=1):
+            if entry.target.id == after.id:
+                await log.send(
+                    f"⏳ **TIMEOUT**\n👤 {after}\n🛠️ By: {entry.user}"
+                )
+
+
+# 🔴 VOICE DISCONNECT (who disconnected who)
+@bot.event
+async def on_voice_state_update(member, before, after):
+    log = bot.get_channel(LOG_CHANNEL_ID)
+    if not log:
+        return
+
+    if before.channel and not after.channel:
+        async for entry in member.guild.audit_logs(limit=1):
+            if entry.target.id == member.id:
+                if entry.action.name == "member_disconnect":
+                    await log.send(
+                        f"🔌 **DISCONNECTED**\n👤 {member}\n🛠️ By: {entry.user}"
+                    )
+                    return
+
+
+# ================= TICKET SYSTEM =================
+
+class TicketView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎟️ Open Ticket", style=discord.ButtonStyle.green)
+    async def open_ticket(self, interaction: discord.Interaction, button: Button):
+        guild = interaction.guild
+        user = interaction.user
+
+        # 🚫 prevent duplicate tickets
+        existing = discord.utils.get(guild.channels, name=f"ticket-{user.id}")
+        if existing:
+            await interaction.response.send_message(
+                "❌ You already have an open ticket!",
+                ephemeral=True
+            )
+            return
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        }
+
+        # 👑 admins can see tickets
+        for role in guild.roles:
+            if role.permissions.administrator:
+                overwrites[role] = discord.PermissionOverwrite(read_messages=True)
+
+        category = guild.get_channel(TICKET_CATEGORY_ID)
+
+        channel = await guild.create_text_channel(
+            name=f"ticket-{user.id}",
+            overwrites=overwrites,
+            category=category
+        )
+
+        embed = discord.Embed(
+            title="🎟️ Support Ticket",
+            description=f"{user.mention}, describe your issue.\nStaff will help you soon.",
+            color=discord.Color.green()
+        )
+
+        await channel.send(embed=embed, view=CloseView())
+
+        await interaction.response.send_message(
+            f"✅ Ticket created: {channel.mention}",
+            ephemeral=True
+        )
+
+
+# 🔒 CLOSE BUTTON
+class CloseView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
+    async def close_ticket(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_message("🔒 Closing ticket...", ephemeral=True)
+        await interaction.channel.delete()
+
+
+# 📢 SEND PANEL
+@bot.tree.command(name="ticketpanel", description="Send ticket panel")
+async def ticketpanel(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎟️ Support System",
+        description="Click the button below to open a private ticket.",
+        color=discord.Color.blurple()
+    )
+
+    await interaction.response.send_message(
+        embed=embed,
+        view=TicketView()
+    )
 
 bot.run(TOKEN)
 
