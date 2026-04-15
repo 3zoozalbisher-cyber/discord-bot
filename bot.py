@@ -103,7 +103,7 @@ async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
-    # 🔊 JOIN
+    # JOIN
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = now
 
@@ -113,7 +113,7 @@ async def on_voice_state_update(member, before, after):
             )
         return
 
-    # 🔇 LEAVE
+    # LEAVE
     if before.channel and after.channel is None:
         start = voice_sessions.pop(member.id, None)
 
@@ -122,7 +122,6 @@ async def on_voice_state_update(member, before, after):
         else:
             duration = int(now - start)
 
-        # 🔌 DISCONNECT CHECK
         disconnected_by = None
         async for entry in member.guild.audit_logs(limit=1):
             if entry.target.id == member.id:
@@ -130,29 +129,18 @@ async def on_voice_state_update(member, before, after):
                     disconnected_by = entry.user
                     break
 
-        minutes = duration // 60
-
-        if minutes > 0:
-            await add_xp(member.id, minutes * 10)
-            add_coins(member.id, minutes * 5)
-
-        cursor.execute(
-            "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
-            (duration, member.id)
-        )
-        db.commit()
-
         h = duration // 3600
         m = (duration % 3600) // 60
-if log:
-    if disconnected_by:
-        await log.send(
-            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
-        )
 
-    await log.send(
-        f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
-    )
+        if log:
+            if disconnected_by:
+                await log.send(
+                    f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
+                )
+
+            await log.send(
+                f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+            )
         
 @bot.event
 async def on_member_join(member):
