@@ -103,19 +103,29 @@ async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
+    # 🔊 JOIN
+    if before.channel is None and after.channel is not None:
+        voice_sessions[member.id] = now
+
+        if log:
+            await log.send(
+                f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
+            )
+        return
+
+    # 🔇 LEAVE
     if before.channel and after.channel is None:
         start = voice_sessions.pop(member.id, None)
         if not start:
             return
 
         # 🔌 DISCONNECT CHECK
+        disconnected_by = None
         async for entry in member.guild.audit_logs(limit=1):
             if entry.target.id == member.id:
                 if entry.action.name == "member_disconnect":
-                    if log:
-                        await log.send(
-                            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {entry.user}"
-                        )
+                    disconnected_by = entry.user
+                    break
 
         duration = int(now - start)
         minutes = duration // 60
@@ -132,10 +142,16 @@ async def on_voice_state_update(member, before, after):
 
         h = duration // 3600
         m = (duration % 3600) // 60
-        s = duration % 60
 
         if log:
-            await log.send(f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m {s}s")
+            if disconnected_by:
+                await log.send(
+                    f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
+                )
+            else:
+                await log.send(
+                    f"🔇 left voice\n👤 {member}\n⏱️ {h}h {m}m"
+                )
 
 @bot.event
 async def on_member_join(member):
