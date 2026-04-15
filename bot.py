@@ -145,17 +145,16 @@ if before.channel is None and after.channel is not None:
 
         h = duration // 3600
         m = (duration % 3600) // 60
+if log:
+    if disconnected_by:
+        await log.send(
+            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
+        )
 
-        if log:
-            if disconnected_by:
-                await log.send(
-                    f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
-                )
-            else:
-                await log.send(
-                    f"🔇 left voice\n👤 {member}\n⏱️ {h}h {m}m"
-                )
-
+    await log.send(
+        f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+    )
+    
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
