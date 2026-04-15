@@ -103,24 +103,25 @@ async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
-  # 🔊 JOIN
-if before.channel is None and after.channel is not None:
-    voice_sessions[member.id] = now
+    # 🔊 JOIN
+    if before.channel is None and after.channel is not None:
+        voice_sessions[member.id] = now
 
-    if log:
-        await log.send(
-            f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
-        )
-    return
+        if log:
+            await log.send(
+                f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
+            )
+        return
 
     # 🔇 LEAVE
-   if before.channel and after.channel is None:
-    start = voice_sessions.pop(member.id, None)
+    if before.channel and after.channel is None:
+        start = voice_sessions.pop(member.id, None)
 
-    if not start:
-        duration = 0
-    else:
-        duration = int(now - start)
+        if not start:
+            duration = 0
+        else:
+            duration = int(now - start)
+
         # 🔌 DISCONNECT CHECK
         disconnected_by = None
         async for entry in member.guild.audit_logs(limit=1):
@@ -129,7 +130,6 @@ if before.channel is None and after.channel is not None:
                     disconnected_by = entry.user
                     break
 
-        duration = int(now - start)
         minutes = duration // 60
 
         if minutes > 0:
@@ -144,16 +144,16 @@ if before.channel is None and after.channel is not None:
 
         h = duration // 3600
         m = (duration % 3600) // 60
-if log:
-    if disconnected_by:
-        await log.send(
-            f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
-        )
 
-    await log.send(
-        f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
-    )
-    
+        if log:
+            if disconnected_by:
+                await log.send(
+                    f"🔌 DISCONNECTED\n👤 {member}\n🛠️ By: {disconnected_by}"
+                )
+
+            await log.send(
+                f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+            )
 @bot.event
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
