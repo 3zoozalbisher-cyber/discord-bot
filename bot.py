@@ -115,13 +115,13 @@ async def on_voice_state_update(member, before, after):
         return
 
     # LEAVE
-   if before.channel and after.channel is None:
-    start = voice_sessions.pop(member.id, None)
-
-    if not start:
-        duration = 0
-    else:
-        duration = int(now - start)
+    if before.channel and after.channel is None:
+        start = voice_sessions.pop(member.id, None)
+    
+        if not start:
+            duration = 0
+        else:
+            duration = int(now - start)
 
     disconnected_by = None
 
