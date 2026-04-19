@@ -104,28 +104,49 @@ async def on_voice_state_update(member, before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
     now = time.time()
 
-    # JOIN
+    # ===== JOIN =====
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = now
+        ensure_user(member.id)
 
         if log:
             await log.send(
                 f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
             )
-        return
 
-    # LEAVE
-    if before.channel and after.channel is None:
+    # ===== LEAVE =====
+    elif before.channel is not None and after.channel is None:
         start = voice_sessions.pop(member.id, None)
 
-        duration = int(now - start) if start else 0
+        if not start:
+            return
 
+        duration = int(now - start)
+
+        # 💾 SAVE VOICE TIME
+        ensure_user(member.id)
+        cursor.execute(
+            "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+            (duration, member.id)
+        )
+        db.commit()
+
+        # ⭐ GIVE XP (10 per minute)
+        minutes = duration // 60
+        if minutes > 0:
+            await add_xp(member.id, minutes * 10)
+
+        # ⏱️ FORMAT TIME
         h = duration // 3600
         m = (duration % 3600) // 60
+        s = duration % 60
 
         if log:
             await log.send(
-                f"🔇 left voice\n👤 {member.mention}\n⏱️ {h}h {m}m"
+                f"🔇 left voice\n"
+                f"👤 {member.mention}\n"
+                f"🎧 {before.channel.name}\n"
+                f"⏱️ {h}h {m}m {s}s"
             )
     
 @bot.event
