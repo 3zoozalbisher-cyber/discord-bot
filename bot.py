@@ -174,7 +174,7 @@ async def on_member_update(before, after):
             await log.send(f"❌ removed role\n👤 {after.mention}\n🎭 {role.name}")
 
     # ⏳ TIMEOUT
-    if before.communication_disabled_until != after.communication_disabled_until:
+    if before.timed_out_until != after.timed_out_until:
         async for entry in after.guild.audit_logs(limit=1):
             if entry.target.id == after.id:
                 await log.send(
