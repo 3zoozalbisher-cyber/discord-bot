@@ -156,12 +156,7 @@ async def on_member_join(member):
         await ch.send(f"🎉 Welcome {member.mention}!",
                       file=discord.File("images/welcome.png"))
 
-@bot.event
-async def on_member_remove(member):
-    ch = bot.get_channel(GOODBYE_CHANNEL_ID)
-    if ch:
-        await ch.send(f"👋 {member.name} left the server",
-                      file=discord.File("images/goodbye.png"))
+
 @bot.event
 async def on_member_update(before, after):
     log = bot.get_channel(LOG_CHANNEL_ID)
@@ -458,19 +453,31 @@ async def joinvc(interaction: discord.Interaction):
 # 🔴 KICK / LEAVE
 @bot.event
 async def on_member_remove(member):
+    kicked = False
+
     log = bot.get_channel(LOG_CHANNEL_ID)
-    if not log:
-        return
 
-    async for entry in member.guild.audit_logs(limit=1):
-        if entry.target.id == member.id:
-            if entry.action.name == "kick":
+    if log:
+        async for entry in member.guild.audit_logs(limit=1):
+            if (
+                entry.action == discord.AuditLogAction.kick
+                and entry.target.id == member.id
+            ):
+                kicked = True
                 await log.send(
-                    f"👢 **KICKED**\n👤 {member}\n🛠️ By: {entry.user}"
+                    f"👢 **KICKED**\n"
+                    f"👤 {member}\n"
+                    f"🛠️ By: {entry.user}"
                 )
-                return
+                break
 
-    await log.send(f"👋 {member} left the server")
+    if not kicked:
+        goodbye = bot.get_channel(GOODBYE_CHANNEL_ID)
+        if goodbye:
+            await goodbye.send(
+                f"👋 {member.name} left the server",
+                file=discord.File("images/goodbye.png")
+            )
 
 
 # 🔴 BAN
