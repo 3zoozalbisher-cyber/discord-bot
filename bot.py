@@ -122,12 +122,16 @@ async def add_xp(user_id, amount):
                 f"🎉 LEVEL UP!\n👤 {user.mention}\n⭐ Level {level}"
             )
 
-# ================= EVENTS =================
+# ================= EVENTS =================\
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
 
+@bot.event
+async def on_socket_raw_receive(msg):
+    if "VOICE_STATE_UPDATE" in msg or "VOICE_SERVER_UPDATE" in msg:
+        print(msg, flush=True)
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -631,10 +635,6 @@ async def leavevc(interaction: discord.Interaction):
             f"❌ Error:\n```{e}```"
         )
 
-@bot.event
-async def on_voice_server_update(data):
-    print("VOICE SERVER UPDATE")
-    print(data)
 
 
 # ================= LOGGING =================
