@@ -577,23 +577,24 @@ async def joinvc(interaction: discord.Interaction):
 
     channel = interaction.user.voice.channel
 
-    try:
-        vc = interaction.guild.voice_client
+    print("STEP 1", flush=True)
 
-        if vc and vc.is_connected():
-            if vc.channel != channel:
-                await vc.move_to(channel)
-        else:
-            vc = await channel.connect(self_deaf=True)
+    vc = interaction.guild.voice_client
 
-        await interaction.followup.send(
-            f"🎧 Joined **{channel.name}**."
-        )
+    if vc:
+        print("STEP 2 - already has vc", flush=True)
+    else:
+        print("STEP 2 - connecting", flush=True)
 
-    except Exception as e:
-        await interaction.followup.send(
-            f"❌ `{type(e).__name__}`\n```{e}```"
-        )
+    vc = await channel.connect()
+
+    print("STEP 3 - connect returned", flush=True)
+
+    print("is_connected:", vc.is_connected(), flush=True)
+
+    print("channel:", vc.channel, flush=True)
+
+    await interaction.followup.send("Finished")
 
 @bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
 async def leavevc(interaction: discord.Interaction):
