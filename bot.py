@@ -571,25 +571,6 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 
 # ================= VOICE =================
 
-voice_connections = {}
-
-
-async def cleanup_voice(guild: discord.Guild):
-    vc = voice_connections.pop(guild.id, None)
-
-    if vc:
-        try:
-            await vc.disconnect(force=True)
-        except:
-            pass
-
-    if guild.voice_client:
-        try:
-            await guild.voice_client.disconnect(force=True)
-        except:
-            pass
-
-
 @bot.tree.command(name="joinvc", description="Join your voice channel")
 async def joinvc(interaction: discord.Interaction):
 
@@ -602,13 +583,24 @@ async def joinvc(interaction: discord.Interaction):
         )
         return
 
-    guild = interaction.guild
     channel = interaction.user.voice.channel
+    vc = interaction.guild.voice_client
 
     try:
-        await cleanup_voice(guild)
+        if vc:
+            if vc.is_connected():
+                if vc.channel != channel:
+                    await vc.move_to(channel)
 
-        await asyncio.sleep(1)
+                await interaction.followup.send(
+                    f"🎵 Joined **{channel.name}**."
+                )
+                return
+
+            try:
+                await vc.disconnect(force=True)
+            except:
+                pass
 
         vc = await channel.connect(
             timeout=30.0,
@@ -616,77 +608,44 @@ async def joinvc(interaction: discord.Interaction):
             self_deaf=True
         )
 
-        voice_connections[guild.id] = vc
-
-        print("CONNECTED:", vc.is_connected(), flush=True)
-print("CHANNEL:", vc.channel, flush=True)
-print("LATENCY:", vc.latency, flush=True)
-print("SESSION:", getattr(vc, "session_id", None), flush=True)
-print("TOKEN:", getattr(vc, "token", None), flush=True)
-print("ENDPOINT:", getattr(vc, "endpoint", None), flush=True)
-
-await asyncio.sleep(5)
-
-print("AFTER 5 SECONDS:", vc.is_connected(), flush=True)
-
         await interaction.followup.send(
-            f"✅ Joined **{channel.name}**."
+            f"🎵 Joined **{channel.name}**."
         )
 
     except Exception as e:
-
-        await cleanup_voice(guild)
-
         await interaction.followup.send(
-            f"❌ Failed to join voice.\n```{type(e).__name__}: {e}```",
+            f"❌ {type(e).__name__}: {e}",
             ephemeral=True
         )
-
 
 @bot.tree.command(name="leavevc", description="Leave the voice channel")
 async def leavevc(interaction: discord.Interaction):
 
     await interaction.response.defer()
 
-    guild = interaction.guild
+    vc = interaction.guild.voice_client
 
-    vc = voice_connections.get(guild.id)
-
-    if vc is None:
-        vc = guild.voice_client
-
-    if vc is None:
+    if not vc or not vc.is_connected():
         await interaction.followup.send(
-            "❌ I'm not in a voice channel.",
+            "❌ I'm not connected to a voice channel.",
             ephemeral=True
         )
         return
 
-    try:
-        channel_name = vc.channel.name if vc.channel else "Unknown"
+    channel_name = vc.channel.name
 
+    try:
         await vc.disconnect(force=True)
 
-    except:
-        pass
+        await interaction.followup.send(
+            f"👋 Left **{channel_name}**."
+        )
 
-    voice_connections.pop(guild.id, None)
-
-    await interaction.followup.send(
-        f"👋 Left **{channel_name}**."
-    )
-
-
-@bot.event
-async def on_voice_state_update(member, before, after):
-
-    if member.bot and member.id == bot.user.id:
-
-        if after.channel is None:
-
-            voice_connections.pop(member.guild.id, None)
-
-
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ {type(e).__name__}: {e}",
+            ephemeral=True
+        )
 # ================= LOGGING =================
 
 # 🔴 KICK / LEAVE
