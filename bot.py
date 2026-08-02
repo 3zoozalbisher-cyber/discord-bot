@@ -587,7 +587,14 @@ async def joinvc(interaction: discord.Interaction):
         print("STEP 2 - connecting", flush=True)
 
     vc = await channel.connect()
-
+print("========== VOICE DEBUG ==========", flush=True)
+print("VoiceClient:", vc, flush=True)
+print("Connected:", vc.is_connected(), flush=True)
+print("Channel:", vc.channel, flush=True)
+print("Session ID:", getattr(vc, "session_id", None), flush=True)
+print("Token:", getattr(vc, "token", None), flush=True)
+print("Endpoint:", getattr(vc, "endpoint", None), flush=True)
+print("=================================", flush=True)
     print("STEP 3 - connect returned", flush=True)
 
     print("is_connected:", vc.is_connected(), flush=True)
