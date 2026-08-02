@@ -425,6 +425,7 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 async def joinvc(interaction: discord.Interaction):
     await interaction.response.defer()
 
+    # User must be in a VC
     if not interaction.user.voice or not interaction.user.voice.channel:
         await interaction.followup.send("❌ You must be in a voice channel.")
         return
@@ -433,21 +434,62 @@ async def joinvc(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
 
     try:
-        if vc and vc.is_connected():
-            await vc.move_to(channel)
-        else:
-            vc = await channel.connect()
+        # Clean up a broken voice client
+        if vc and not vc.is_connected():
+            try:
+                await vc.disconnect(force=True)
+            except:
+                pass
+            vc = None
 
-        await interaction.guild.change_voice_state(
-            channel=channel,
-            self_deaf=True
+        # Already connected
+        if vc:
+            if vc.channel != channel:
+                await vc.move_to(channel)
+        else:
+            vc = await channel.connect(self_deaf=True)
+            
+        await interaction.followup.send(
+            f"🎧 Joined **{channel.name}** and deafened."
+        )
+
+    except discord.ClientException as e:
+        await interaction.followup.send(
+            f"❌ Voice Client Error:\n```{e}```"
+        )
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send(
+            "❌ Connection timed out. Please try again."
         )
 
     except Exception as e:
-        await interaction.followup.send(f"❌ Error: {e}")
+        await interaction.followup.send(
+            f"❌ Unexpected Error:\n```{e}```"
+        )
+
+@bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
+async def leavevc(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    vc = interaction.guild.voice_client
+
+    if not vc or not vc.is_connected():
+        await interaction.followup.send("❌ I'm not connected to a voice channel.")
         return
 
-    await interaction.followup.send(f"🎧 Joined {channel.name} and deafened.")
+    try:
+        channel_name = vc.channel.name
+        await vc.disconnect(force=True)
+
+        await interaction.followup.send(
+            f"👋 Left **{channel_name}**."
+        )
+
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ Error:\n```{e}```"
+        )
 # ================= LOGGING =================
 
 # 🔴 KICK / LEAVE
