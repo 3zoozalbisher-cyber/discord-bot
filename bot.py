@@ -6,6 +6,10 @@ import psycopg2
 import random
 from discord.ui import View, Button
 import asyncio
+import nacl
+
+print("discord.py:", discord.__version__)
+print("PyNaCl loaded:", nacl.__version__)
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
