@@ -569,38 +569,11 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 @bot.tree.command(name="joinvc")
 async def joinvc(interaction: discord.Interaction):
 
-    await interaction.response.defer(thinking=True)
+    await interaction.response.send_message("STEP 0")
 
-    if not interaction.user.voice:
-        await interaction.followup.send("❌ Join a VC first.")
-        return
+    print("STEP 0", flush=True)
 
-    channel = interaction.user.voice.channel
-
-    print("STEP 1", flush=True)
-
-    vc = interaction.guild.voice_client
-
-    if vc:
-        print("STEP 2 - already has vc", flush=True)
-    else:
-        print("STEP 2 - connecting", flush=True)
-        vc = await channel.connect()
-
-    print("========== VOICE DEBUG ==========", flush=True)
-    print("VoiceClient:", vc, flush=True)
-    print("Connected:", vc.is_connected(), flush=True)
-    print("Channel:", vc.channel, flush=True)
-    print("Session ID:", getattr(vc, "session_id", None), flush=True)
-    print("Token:", getattr(vc, "token", None), flush=True)
-    print("Endpoint:", getattr(vc, "endpoint", None), flush=True)
-    print("=================================", flush=True)
-
-    print("STEP 3 - connect returned", flush=True)
-    print("is_connected:", vc.is_connected(), flush=True)
-    print("channel:", vc.channel, flush=True)
-
-    await interaction.followup.send("Finished")
+    return
 
 @bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
 async def leavevc(interaction: discord.Interaction):
