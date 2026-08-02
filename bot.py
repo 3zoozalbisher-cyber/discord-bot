@@ -560,52 +560,18 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 
 # ================= VOICE =================
 
-@bot.tree.command(name="joinvc", description="Join VC and deafen")
+@bot.tree.command(name="joinvc")
 async def joinvc(interaction: discord.Interaction):
-    await interaction.response.defer()
 
-    # User must be in a VC
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.followup.send("❌ You must be in a voice channel.")
+    if not interaction.user.voice:
+        await interaction.response.send_message("Join a VC first.")
         return
 
-    channel = interaction.user.voice.channel
-    vc = interaction.guild.voice_client
+    vc = await interaction.user.voice.channel.connect()
 
-    try:
-        # Clean up a broken voice client
-        if vc and not vc.is_connected():
-            try:
-                await vc.disconnect(force=True)
-            except:
-                pass
-            vc = None
-
-        # Already connected
-        if vc:
-            if vc.channel != channel:
-                await vc.move_to(channel)
-        else:
-            vc = await channel.connect(self_deaf=True)
-            
-        await interaction.followup.send(
-            f"🎧 Joined **{channel.name}** and deafened."
-        )
-
-    except discord.ClientException as e:
-        await interaction.followup.send(
-            f"❌ Voice Client Error:\n```{e}```"
-        )
-
-    except asyncio.TimeoutError:
-        await interaction.followup.send(
-            "❌ Connection timed out. Please try again."
-        )
-
-    except Exception as e:
-        await interaction.followup.send(
-            f"❌ Unexpected Error:\n```{e}```"
-        )
+    await interaction.response.send_message(
+        f"Connected: {vc.is_connected()}"
+    )
 
 @bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
 async def leavevc(interaction: discord.Interaction):
