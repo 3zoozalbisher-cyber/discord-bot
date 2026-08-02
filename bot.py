@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import os
 import time
-import sqlite3
+import psycopg2
 import random
 from discord.ui import View, Button
 import asyncio
@@ -15,18 +15,22 @@ LOG_CHANNEL_ID = 1460366893994086554
 APPLICATION_ID = 1460013127063175229
 TICKET_CATEGORY_ID = 1493876395200221204
 # ================= DATABASE =================
-db = sqlite3.connect("bot.db", check_same_thread=False)
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+db = psycopg2.connect(DATABASE_URL)
 cursor = db.cursor()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
+    user_id BIGINT PRIMARY KEY,
     xp INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
-    voice_time INTEGER DEFAULT 0,
+    voice_time BIGINT DEFAULT 0,
     coins INTEGER DEFAULT 0
 )
 """)
+
 db.commit()
 
 # ================= INTENTS =================
