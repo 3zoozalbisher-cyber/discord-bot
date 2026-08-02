@@ -574,36 +574,16 @@ async def joinvc(interaction: discord.Interaction):
 
     if not interaction.user.voice:
         await interaction.response.send_message(
-            "❌ You must be in a voice channel.",
+            "❌ Join a VC first.",
             ephemeral=True
         )
         return
 
-    channel = interaction.user.voice.channel
-
-    vc = interaction.guild.voice_client
-
     try:
-        if vc and vc.is_connected():
-            if vc.channel != channel:
-                await vc.move_to(channel)
-            await interaction.response.send_message(
-                f"🎵 Moved to **{channel.name}**."
-            )
-            return
+        vc = await interaction.user.voice.channel.connect()
 
-        if vc:
-            try:
-                await vc.disconnect(force=True)
-            except:
-                pass
-
-        await asyncio.sleep(1)
-
-        await channel.connect(timeout=30.0)
-        
         await interaction.response.send_message(
-            f"🎵 Joined **{channel.name}**."
+            f"Connected: {vc.is_connected()}"
         )
 
     except Exception as e:
