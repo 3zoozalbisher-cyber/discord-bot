@@ -618,6 +618,18 @@ async def leavevc(interaction: discord.Interaction):
         await interaction.followup.send(
             f"❌ Error:\n```{e}```"
         )
+
+@bot.event
+async def on_voice_server_update(data):
+    print("VOICE SERVER UPDATE")
+    print(data)
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member.id == bot.user.id:
+        print("BOT VOICE STATE")
+        print(before.channel)
+        print(after.channel)
 # ================= LOGGING =================
 
 # 🔴 KICK / LEAVE
