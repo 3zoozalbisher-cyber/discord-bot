@@ -569,11 +569,32 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 @bot.tree.command(name="joinvc")
 async def joinvc(interaction: discord.Interaction):
 
-    await interaction.response.send_message("STEP 0")
+    await interaction.response.defer(thinking=True)
 
-    print("STEP 0", flush=True)
+    if not interaction.user.voice:
+        await interaction.followup.send("Join a VC first.")
+        return
 
-    return
+    channel = interaction.user.voice.channel
+
+    print("STEP 1", flush=True)
+    await interaction.followup.send("STEP 1")
+
+    try:
+        print("STEP 2", flush=True)
+        await interaction.followup.send("STEP 2")
+
+        vc = await channel.connect(timeout=30)
+
+        print("STEP 3", flush=True)
+        await interaction.followup.send("STEP 3")
+
+        print(vc, flush=True)
+        print(vc.is_connected(), flush=True)
+
+    except Exception as e:
+        print("ERROR:", repr(e), flush=True)
+        await interaction.followup.send(f"```py\n{repr(e)}\n```")
 
 @bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
 async def leavevc(interaction: discord.Interaction):
