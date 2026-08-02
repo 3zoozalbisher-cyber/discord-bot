@@ -46,21 +46,43 @@ message_cooldown = {}
 daily_cooldown = {}
 
 # ================= HELPERS =================
+
 def ensure_user(user_id):
-    cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+    cursor.execute("""
+        INSERT INTO users (user_id)
+        VALUES (%s)
+        ON CONFLICT (user_id) DO NOTHING
+    """, (user_id,))
     db.commit()
+
 
 def add_coins(user_id, amount):
     ensure_user(user_id)
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
+
+    cursor.execute(
+        "SELECT coins FROM users WHERE user_id = %s",
+        (user_id,)
+    )
+
     coins = cursor.fetchone()[0]
     coins = max(0, coins + amount)
-    cursor.execute("UPDATE users SET coins = ? WHERE user_id = ?", (coins, user_id))
+
+    cursor.execute(
+        "UPDATE users SET coins = %s WHERE user_id = %s",
+        (coins, user_id)
+    )
+
     db.commit()
+
 
 async def add_xp(user_id, amount):
     ensure_user(user_id)
-    cursor.execute("SELECT xp, level FROM users WHERE user_id = ?", (user_id,))
+
+    cursor.execute(
+        "SELECT xp, level FROM users WHERE user_id = %s",
+        (user_id,)
+    )
+
     xp, level = cursor.fetchone()
 
     xp += amount
@@ -73,14 +95,26 @@ async def add_xp(user_id, amount):
         needed = level * 100
         leveled = True
 
-    cursor.execute("UPDATE users SET xp = ?, level = ? WHERE user_id = ?", (xp, level, user_id))
+    cursor.execute(
+        """
+        UPDATE users
+        SET xp=%s,
+            level=%s
+        WHERE user_id=%s
+        """,
+        (xp, level, user_id)
+    )
+
     db.commit()
 
     if leveled:
         channel = bot.get_channel(LOG_CHANNEL_ID)
         user = bot.get_user(user_id)
+
         if channel and user:
-            await channel.send(f"🎉 LEVEL UP!\n👤 {user.mention}\n⭐ Level {level}")
+            await channel.send(
+                f"🎉 LEVEL UP!\n👤 {user.mention}\n⭐ Level {level}"
+            )
 
 # ================= EVENTS =================
 @bot.event
@@ -115,32 +149,39 @@ async def on_voice_state_update(member, before, after):
 
         if log:
             await log.send(
-                f"🔊 joined voice\n👤 {member.mention}\n🎧 {after.channel.name}"
+                f"🔊 joined voice\n"
+                f"👤 {member.mention}\n"
+                f"🎧 {after.channel.name}"
             )
 
     # ===== LEAVE =====
     elif before.channel is not None and after.channel is None:
         start = voice_sessions.pop(member.id, None)
 
-        if not start:
+        if start is None:
             return
 
         duration = int(now - start)
 
-        # 💾 SAVE VOICE TIME
         ensure_user(member.id)
+
         cursor.execute(
-            "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+            """
+            UPDATE users
+            SET voice_time = voice_time + %s
+            WHERE user_id = %s
+            """,
             (duration, member.id)
         )
+
         db.commit()
 
-        # ⭐ GIVE XP (10 per minute)
+        # ⭐ Give XP
         minutes = duration // 60
+
         if minutes > 0:
             await add_xp(member.id, minutes * 10)
 
-        # ⏱️ FORMAT TIME
         h = duration // 3600
         m = (duration % 3600) // 60
         s = duration % 60
@@ -195,33 +236,51 @@ async def addvc(
     minutes: int = 0
 ):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ No permission.",
+            ephemeral=True
+        )
         return
 
     total_seconds = (hours * 3600) + (minutes * 60)
 
     if total_seconds <= 0:
-        await interaction.response.send_message("❌ Enter valid time.", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ Enter valid time.",
+            ephemeral=True
+        )
         return
 
     ensure_user(user.id)
 
     cursor.execute(
-        "UPDATE users SET voice_time = voice_time + ? WHERE user_id = ?",
+        """
+        UPDATE users
+        SET voice_time = voice_time + %s
+        WHERE user_id = %s
+        """,
         (total_seconds, user.id)
     )
+
     db.commit()
 
     await interaction.response.send_message(
         f"⏱️ Added {hours}h {minutes}m to {user.mention}"
     )
 
-
 @bot.tree.command(name="profile")
 async def profile(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
-    cursor.execute("SELECT xp, level, voice_time, coins FROM users WHERE user_id = ?",
-                   (interaction.user.id,))
+
+    cursor.execute(
+        """
+        SELECT xp, level, voice_time, coins
+        FROM users
+        WHERE user_id = %s
+        """,
+        (interaction.user.id,)
+    )
+
     xp, level, voice, coins = cursor.fetchone()
 
     needed = level * 100
@@ -259,9 +318,21 @@ async def voicetop(interaction: discord.Interaction):
 @bot.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
     ensure_user(interaction.user.id)
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
+
+    cursor.execute(
+        """
+        SELECT coins
+        FROM users
+        WHERE user_id = %s
+        """,
+        (interaction.user.id,)
+    )
+
     coins = cursor.fetchone()[0]
-    await interaction.response.send_message(f"💰 {coins} coins")
+
+    await interaction.response.send_message(
+        f"💰 {coins} coins"
+    )
 
 @bot.tree.command(name="add", description="Add xp, coins, or levels (Admin only)")
 async def add(
@@ -278,25 +349,55 @@ async def add(
 
     if type == "xp":
         await add_xp(user.id, amount)
-        await interaction.response.send_message(f"✅ Added {amount} XP to {user.mention}")
+        await interaction.response.send_message(
+            f"✅ Added {amount} XP to {user.mention}"
+        )
 
     elif type == "coins":
         add_coins(user.id, amount)
-        await interaction.response.send_message(f"💰 Added {amount} coins to {user.mention}")
+        await interaction.response.send_message(
+            f"💰 Added {amount} coins to {user.mention}"
+        )
 
     elif type == "level":
         ensure_user(user.id)
-        cursor.execute("SELECT level FROM users WHERE user_id = ?", (user.id,))
+
+        cursor.execute(
+            """
+            SELECT level
+            FROM users
+            WHERE user_id = %s
+            """,
+            (user.id,)
+        )
+
         level = cursor.fetchone()[0]
         level += amount
+
         if level < 1:
             level = 1
-        cursor.execute("UPDATE users SET level = ?, xp = 0 WHERE user_id = ?", (level, user.id))
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET level = %s,
+                xp = 0
+            WHERE user_id = %s
+            """,
+            (level, user.id)
+        )
+
         db.commit()
-        await interaction.response.send_message(f"⭐ {user.mention} is now level {level}")
+
+        await interaction.response.send_message(
+            f"⭐ {user.mention} is now level {level}"
+        )
 
     else:
-        await interaction.response.send_message("Type must be xp, coins, or level.", ephemeral=True)
+        await interaction.response.send_message(
+            "Type must be xp, coins, or level.",
+            ephemeral=True
+        )
 
 
 @bot.tree.command(name="remove", description="Remove xp, coins, or levels (Admin only)")
@@ -314,47 +415,81 @@ async def remove(
 
     if type == "xp":
         ensure_user(user.id)
-        cursor.execute("SELECT xp FROM users WHERE user_id = ?", (user.id,))
+
+        cursor.execute(
+            """
+            SELECT xp
+            FROM users
+            WHERE user_id = %s
+            """,
+            (user.id,)
+        )
+
         xp = cursor.fetchone()[0]
         xp = max(0, xp - amount)
-        cursor.execute("UPDATE users SET xp = ? WHERE user_id = ?", (xp, user.id))
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET xp = %s
+            WHERE user_id = %s
+            """,
+            (xp, user.id)
+        )
+
         db.commit()
-        await interaction.response.send_message(f"❌ Removed {amount} XP from {user.mention}")
+
+        await interaction.response.send_message(
+            f"❌ Removed {amount} XP from {user.mention}"
+        )
 
     elif type == "coins":
         add_coins(user.id, -amount)
-        await interaction.response.send_message(f"💰 Removed {amount} coins from {user.mention}")
+
+        await interaction.response.send_message(
+            f"💰 Removed {amount} coins from {user.mention}"
+        )
 
     elif type == "level":
         ensure_user(user.id)
-        cursor.execute("SELECT level FROM users WHERE user_id = ?", (user.id,))
+
+        cursor.execute(
+            """
+            SELECT level
+            FROM users
+            WHERE user_id = %s
+            """,
+            (user.id,)
+        )
+
         level = cursor.fetchone()[0]
         level -= amount
+
         if level < 1:
             level = 1
-        cursor.execute("UPDATE users SET level = ?, xp = 0 WHERE user_id = ?", (level, user.id))
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET level = %s,
+                xp = 0
+            WHERE user_id = %s
+            """,
+            (level, user.id)
+        )
+
         db.commit()
-        await interaction.response.send_message(f"⭐ {user.mention} is now level {level}")
+
+        await interaction.response.send_message(
+            f"⭐ {user.mention} is now level {level}"
+        )
 
     else:
-        await interaction.response.send_message("Type must be xp, coins, or level.", ephemeral=True)
+        await interaction.response.send_message(
+            "Type must be xp, coins, or level.",
+            ephemeral=True
+        )
 
-@bot.tree.command(name="gamble")
-async def gamble(interaction: discord.Interaction, amount: int):
-    ensure_user(interaction.user.id)
-    cursor.execute("SELECT coins FROM users WHERE user_id = ?", (interaction.user.id,))
-    coins = cursor.fetchone()[0]
-
-    if amount <= 0 or amount > coins:
-        await interaction.response.send_message("Invalid amount.", ephemeral=True)
-        return
-
-    if random.randint(1, 4) == 1:
-        add_coins(interaction.user.id, amount)
-        await interaction.response.send_message(f"🎉 You won {amount} coins! (25%)")
-    else:
-        add_coins(interaction.user.id, -amount)
-        await interaction.response.send_message(f"💀 You lost {amount} coins.")
 
 @bot.tree.command(name="jl5")
 async def jl5(interaction: discord.Interaction):
