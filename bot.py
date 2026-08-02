@@ -618,8 +618,16 @@ async def joinvc(interaction: discord.Interaction):
 
         voice_connections[guild.id] = vc
 
-        if not vc.is_connected():
-            raise Exception("Voice client disconnected immediately.")
+        print("CONNECTED:", vc.is_connected(), flush=True)
+print("CHANNEL:", vc.channel, flush=True)
+print("LATENCY:", vc.latency, flush=True)
+print("SESSION:", getattr(vc, "session_id", None), flush=True)
+print("TOKEN:", getattr(vc, "token", None), flush=True)
+print("ENDPOINT:", getattr(vc, "endpoint", None), flush=True)
+
+await asyncio.sleep(5)
+
+print("AFTER 5 SECONDS:", vc.is_connected(), flush=True)
 
         await interaction.followup.send(
             f"✅ Joined **{channel.name}**."
