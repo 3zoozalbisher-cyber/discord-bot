@@ -565,23 +565,48 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
     )
 
 # ================= VOICE =================
+@bot.tree.command(name="joinvc", description="Join your voice channel")
+async def joinvc(interaction: discord.Interaction):
 
-@bot.tree.command(name="leavevc")
-async def leavevc(interaction: discord.Interaction):
+    if not interaction.user.voice:
+        await interaction.response.send_message(
+            "❌ You must be in a voice channel.",
+            ephemeral=True
+        )
+        return
+
+    channel = interaction.user.voice.channel
 
     vc = interaction.guild.voice_client
 
-    if vc is None:
-        await interaction.response.send_message("voice_client = None")
-        return
+    try:
+        if vc and vc.is_connected():
+            if vc.channel != channel:
+                await vc.move_to(channel)
+            await interaction.response.send_message(
+                f"🎵 Moved to **{channel.name}**."
+            )
+            return
 
-    await interaction.response.send_message(
-        f"""
-Connected: {vc.is_connected()}
-Channel: {vc.channel}
-Guild VC: {interaction.guild.voice_client}
-"""
-    )
+        if vc:
+            try:
+                await vc.disconnect(force=True)
+            except:
+                pass
+
+        await asyncio.sleep(1)
+
+        await channel.connect(reconnect=False, self_deaf=True)
+
+        await interaction.response.send_message(
+            f"🎵 Joined **{channel.name}**."
+        )
+
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ {type(e).__name__}: {e}",
+            ephemeral=True
+        )
 
 @bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
 async def leavevc(interaction: discord.Interaction):
