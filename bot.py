@@ -566,35 +566,36 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
 
 # ================= VOICE =================
 
-@bot.tree.command(name="joinvc")
+@bot.tree.command(name="joinvc", description="Join your voice channel")
 async def joinvc(interaction: discord.Interaction):
 
-    await interaction.response.defer(thinking=True)
-
-    if not interaction.user.voice:
-        await interaction.followup.send("Join a VC first.")
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message(
+            "❌ You must be in a voice channel.",
+            ephemeral=True
+        )
         return
 
     channel = interaction.user.voice.channel
 
-    print("STEP 1", flush=True)
-    await interaction.followup.send("STEP 1")
-
     try:
-        print("STEP 2", flush=True)
-        await interaction.followup.send("STEP 2")
+        vc = interaction.guild.voice_client
 
-        vc = await channel.connect(timeout=30)
+        if vc:
+            if vc.channel != channel:
+                await vc.move_to(channel)
+        else:
+            vc = await channel.connect()
 
-        print("STEP 3", flush=True)
-        await interaction.followup.send("STEP 3")
-
-        print(vc, flush=True)
-        print(vc.is_connected(), flush=True)
+        await interaction.response.send_message(
+            f"🎵 Joined **{channel.name}**."
+        )
 
     except Exception as e:
-        print("ERROR:", repr(e), flush=True)
-        await interaction.followup.send(f"```py\n{repr(e)}\n```")
+        await interaction.response.send_message(
+            f"❌ Error:\n```{e}```",
+            ephemeral=True
+        )
 
 @bot.tree.command(name="leavevc", description="Disconnect the bot from voice chat")
 async def leavevc(interaction: discord.Interaction):
