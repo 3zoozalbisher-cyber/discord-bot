@@ -600,8 +600,8 @@ async def joinvc(interaction: discord.Interaction):
 
         await asyncio.sleep(1)
 
-        await channel.connect(reconnect=False, self_deaf=True)
-
+        await channel.connect(timeout=30.0)
+        
         await interaction.response.send_message(
             f"🎵 Joined **{channel.name}**."
         )
